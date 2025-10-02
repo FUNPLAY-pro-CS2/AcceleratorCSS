@@ -23,6 +23,9 @@
 [submodule "vendor/Protobufs"]
 	path = vendor/Protobufs
 	url = https://github.com/SteamDatabase/Protobufs
+[submodule "vendor/zlib"]
+	path = vendor/zlib
+	url = https://github.com/madler/zlib.git
 [submodule "vendor/DynoHook"]
 	path = vendor/DynoHook
-	url = https://github.com/qubka/DynoHook
+	url = https://github.com/qubka/DynoHook.git
