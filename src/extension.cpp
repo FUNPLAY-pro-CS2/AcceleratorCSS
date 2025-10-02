@@ -6,7 +6,19 @@
 #include "CMiniDumpComment.hpp"
 #include "log.h"
 
+#include "dyncall/dyncall/dyncall.h"
+
+#include "pch.h"
+#include "dynohook/core.h"
+#include "dynohook/manager.h"
+
+#ifdef _WIN32
+#include "dynohook/conventions/x64/x64MsFastcall.h"
+#else
+#include "dynohook/conventions/x64/x64SystemVcall.h"
+#endif
 #include <nlohmann/json.hpp>
+
 #include <entitysystem.h>
 #include <entity2/entitysystem.h>
 
@@ -19,10 +31,10 @@
 #include <fstream>
 #include <limits>
 #include <mutex>
-#include <signal.h>
+#include <csignal>
 #include <sstream>
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 #include <sys/stat.h>
 #include <thread>
 #include <unistd.h>
@@ -48,21 +60,26 @@
 #include "processor/stackwalk_common.h"
 #include "processor/pathname_stripper.h"
 
+#define VERSION_STRING SEMVER " @ " GITHUB_SHA
+#define BUILD_TIMESTAMP __DATE__ " " __TIME__
+
 size_t g_MaxCallbackTrace = 10;
 
-struct CallbackTraceEntry {
+struct CallbackTraceEntry
+{
     std::string name;
     std::string profile;
     std::string callerStack;
 };
 
+using namespace dyno;
+namespace fs = std::filesystem;
+
 std::vector<CallbackTraceEntry> g_CallbackTraceBuffer;
 size_t g_CallbackTraceIndex = 0;
 std::mutex g_CallbackTraceMutex;
 
-namespace fs = std::filesystem;
-
-ISmmAPI *g_ISmm = nullptr;
+ISmmAPI* g_ISmm = nullptr;
 
 static std::string lastMap;
 char crashMap[256];
@@ -70,27 +87,32 @@ char crashGamePath[512];
 char crashCommandLine[1024];
 char dumpStoragePath[512];
 
-google_breakpad::ExceptionHandler *exceptionHandler = nullptr;
+google_breakpad::ExceptionHandler* exceptionHandler = nullptr;
 CMiniDumpComment g_MiniDumpComment(95000);
 
-void (*SignalHandler)(int, siginfo_t *, void *);
+void (*SignalHandler)(int, siginfo_t*, void*);
 
 const int kExceptionSignals[] = {SIGSEGV, SIGABRT, SIGFPE, SIGILL, SIGBUS};
 const int kNumHandledSignals = std::size(kExceptionSignals);
 
 bool g_pluginRegistered = false;
 
-auto safeStr = [](const char *str) -> std::string {
+auto safeStr = [](const char* str) -> std::string
+{
     if (!str)
         return "[null]";
-    try {
+    try
+    {
         return std::string(str);
-    } catch (...) {
+    }
+    catch (...)
+    {
         return "[invalid string]";
     }
 };
 
-struct PluginConfig {
+struct PluginConfig
+{
     bool LightweightMode;
     bool LogCallbacksToConsole;
     int CallbackLogSize;
@@ -99,37 +121,76 @@ struct PluginConfig {
 
 PluginConfig config{};
 
-DLL_EXPORT void RegisterCallbackTraceBinary(const void* data, size_t len) {
-    if (!data || len < 6) return;
-
-    const char* raw = reinterpret_cast<const char*>(data);
-    uint16_t nameLen = *reinterpret_cast<const uint16_t*>(raw);
-    uint16_t profileLen = *reinterpret_cast<const uint16_t*>(raw + 2);
-    uint16_t stackLen = *reinterpret_cast<const uint16_t*>(raw + 4);
-
-    if (len < 6 + nameLen + profileLen + stackLen) return;
-
-    std::string name(raw + 6, nameLen);
-    std::string profile(raw + 6 + nameLen, profileLen);
-    std::string stack(raw + 6 + nameLen + profileLen, stackLen);
-
-    if (config.LogCallbacksToConsole) {
-        ACC_CORE_INFO("[Callback] Name: {}", name);
-    }
-
-    std::lock_guard lock(g_CallbackTraceMutex);
-
-    if (g_CallbackTraceBuffer.empty())
-        return;
-
-    size_t bufferSize = g_CallbackTraceBuffer.size();
-    g_CallbackTraceBuffer[g_CallbackTraceIndex % bufferSize] = {
-        std::move(name), std::move(profile), std::move(stack)
-    };
-    g_CallbackTraceIndex++;
+static ReturnAction MyManagedPre(HookType type, Hook& hook)
+{
+    CORE_INFO("[DynoHook] Managed method called (pre)");
+    return ReturnAction::Ignored;
 }
 
-void SetMaxCallbackTrace(size_t newSize) {
+static ReturnAction MyManagedPost(HookType type, Hook& hook)
+{
+    CORE_INFO("[DynoHook] Managed method finished (post)");
+    return ReturnAction::Ignored;
+}
+
+DLL_EXPORT void RegisterManagedMethod(const char* name, void* fnPtr)
+{
+    if (!name || !fnPtr)
+        return;
+
+    auto& manager = HookManager::Get();
+
+    auto detour = manager.hook(
+        fnPtr,
+        [] {
+#ifdef _WIN32
+            return new x64MsFastcall({}, DataType::Void);
+#else
+            return new x64SystemVcall({}, DataType::Void);
+#endif
+        }
+    );
+
+    detour->addCallback(HookType::Pre, reinterpret_cast<HookHandler*>(&MyManagedPre));
+    detour->addCallback(HookType::Post, reinterpret_cast<HookHandler*>(&MyManagedPost));
+
+    CORE_INFO("[DynoHook] Hook installed for {} at {}", name, fnPtr);
+}
+
+// DLL_EXPORT void RegisterCallbackTraceBinary(const void* data, size_t len)
+// {
+//     if (!data || len < 6) return;
+//
+//     const char* raw = reinterpret_cast<const char*>(data);
+//     uint16_t nameLen = *reinterpret_cast<const uint16_t*>(raw);
+//     uint16_t profileLen = *reinterpret_cast<const uint16_t*>(raw + 2);
+//     uint16_t stackLen = *reinterpret_cast<const uint16_t*>(raw + 4);
+//
+//     if (len < 6 + nameLen + profileLen + stackLen) return;
+//
+//     std::string name(raw + 6, nameLen);
+//     std::string profile(raw + 6 + nameLen, profileLen);
+//     std::string stack(raw + 6 + nameLen + profileLen, stackLen);
+//
+//     if (config.LogCallbacksToConsole)
+//     {
+//         CORE_INFO("[Callback] Name: {}", name);
+//     }
+//
+//     std::lock_guard lock(g_CallbackTraceMutex);
+//
+//     if (g_CallbackTraceBuffer.empty())
+//         return;
+//
+//     size_t bufferSize = g_CallbackTraceBuffer.size();
+//     g_CallbackTraceBuffer[g_CallbackTraceIndex % bufferSize] = {
+//         std::move(name), std::move(profile), std::move(stack)
+//     };
+//     g_CallbackTraceIndex++;
+// }
+
+void SetMaxCallbackTrace(size_t newSize)
+{
     std::lock_guard lock(g_CallbackTraceMutex);
 
     if (newSize == 0)
@@ -146,9 +207,11 @@ DLL_EXPORT PluginConfig CssPluginRegistered()
 
     config.LightweightMode = true;
 
-    try {
+    try
+    {
         std::ifstream configFile(AcceleratorCSS::paths::ConfigDirectory());
-        if (configFile.is_open()) {
+        if (configFile.is_open())
+        {
             nlohmann::json j;
             configFile >> j;
 
@@ -158,13 +221,16 @@ DLL_EXPORT PluginConfig CssPluginRegistered()
             if (j.contains("LogCallbacksToConsole") && j["LogCallbacksToConsole"].is_boolean())
                 config.LogCallbacksToConsole = j["LogCallbacksToConsole"].get<bool>();
 
-            if (j.contains("CallbackLogSize") && j["CallbackLogSize"].is_number_integer()) {
+            if (j.contains("CallbackLogSize") && j["CallbackLogSize"].is_number_integer())
+            {
                 config.CallbackLogSize = j["CallbackLogSize"].get<int>();
                 SetMaxCallbackTrace(config.CallbackLogSize);
             }
-            if (j.contains("ProfileExcludeFilters") && j["ProfileExcludeFilters"].is_array()) {
+            if (j.contains("ProfileExcludeFilters") && j["ProfileExcludeFilters"].is_array())
+            {
                 std::ostringstream oss;
-                for (const auto& item : j["ProfileExcludeFilters"]) {
+                for (const auto& item : j["ProfileExcludeFilters"])
+                {
                     if (item.is_string())
                         oss << item.get<std::string>() << ",";
                 }
@@ -178,7 +244,9 @@ DLL_EXPORT PluginConfig CssPluginRegistered()
 
             g_pluginRegistered = true;
         }
-    } catch (...) {
+    }
+    catch (...)
+    {
         filtersJoined = "OnTick,CheckTransmit,Display";
         config.FiltersPtr = filtersJoined.c_str();
     }
@@ -186,15 +254,17 @@ DLL_EXPORT PluginConfig CssPluginRegistered()
     return config;
 }
 
-static bool dumpCallback(const google_breakpad::MinidumpDescriptor &descriptor, void *context, bool succeeded) {
-    ACC_CORE_CRITICAL("- [ Crash detected! Writing custom crash log... ] -");
+static bool dumpCallback(const google_breakpad::MinidumpDescriptor& descriptor, void* context, bool succeeded)
+{
+    CORE_CRITICAL("- [ Crash detected! Writing custom crash log... ] -");
 
     my_strlcpy(dumpStoragePath, descriptor.path(), sizeof(dumpStoragePath));
     my_strlcat(dumpStoragePath, ".txt", sizeof(dumpStoragePath));
 
     std::ofstream dumpFile(dumpStoragePath, std::ios::out | std::ios::trunc);
-    if (!dumpFile.is_open()) {
-        ACC_CORE_ERROR("- [ Failed to open crash log file: {} ] -", dumpStoragePath);
+    if (!dumpFile.is_open())
+    {
+        CORE_ERROR("- [ Failed to open crash log file: {} ] -", dumpStoragePath);
         return false;
     }
 
@@ -205,9 +275,10 @@ static bool dumpCallback(const google_breakpad::MinidumpDescriptor &descriptor, 
     dumpFile << "-------- CONFIG END --------\n\n";
 
     LoggingSystem_GetLogCapture(&g_MiniDumpComment, false);
-    const char *pszConsoleHistory = g_MiniDumpComment.GetStartPointer();
+    const char* pszConsoleHistory = g_MiniDumpComment.GetStartPointer();
 
-    if (pszConsoleHistory[0]) {
+    if (pszConsoleHistory[0])
+    {
         dumpFile << "-------- CONSOLE HISTORY BEGIN --------\n";
         dumpFile << pszConsoleHistory;
         dumpFile << "-------- CONSOLE HISTORY END --------\n\n";
@@ -220,7 +291,8 @@ static bool dumpCallback(const google_breakpad::MinidumpDescriptor &descriptor, 
         const size_t bufferSize = g_CallbackTraceBuffer.size();
         const size_t validCount = std::min(bufferSize, g_CallbackTraceIndex);
 
-        for (size_t i = 0; i < validCount; ++i) {
+        for (size_t i = 0; i < validCount; ++i)
+        {
             size_t idx = (g_CallbackTraceIndex - 1 - i) % bufferSize;
             const auto& entry = g_CallbackTraceBuffer[idx];
 
@@ -234,30 +306,34 @@ static bool dumpCallback(const google_breakpad::MinidumpDescriptor &descriptor, 
 
     dumpFile.close();
 
-    ACC_CORE_INFO("Custom crash log written to: {}", dumpStoragePath);
+    CORE_INFO("Custom crash log written to: {}", dumpStoragePath);
     return true;
 }
 
-CGameEntitySystem *GameEntitySystem() { return nullptr; }
+CGameEntitySystem* GameEntitySystem() { return nullptr; }
 
-class GameSessionConfiguration_t {
+class GameSessionConfiguration_t
+{
 };
 
-PLUGIN_EXPOSE(AcceleratorCSS_MM, acceleratorcss::gPlugin);
+PLUGIN_EXPOSE(AcceleratorCSS_MM, acceleratorcss::g_iPlugin);
 
 SH_DECL_HOOK3_void(IServerGameDLL, GameFrame, SH_NOATTRIB, 0, bool, bool, bool);
 SH_DECL_HOOK3_void(INetworkServerService, StartupServer, SH_NOATTRIB, 0, const GameSessionConfiguration_t&,
                    ISource2WorldSession*, const char*);
 
-namespace acceleratorcss {
-    AcceleratorCSS_MM gPlugin;
+namespace acceleratorcss
+{
+    AcceleratorCSS_MM g_iPlugin;
 
-    bool AcceleratorCSS_MM::Load(PluginId id, ISmmAPI *ismm, char *error, size_t maxlen, bool late) {
+    bool AcceleratorCSS_MM::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool late)
+    {
         PLUGIN_SAVEVARS();
         Log::Init();
 
         GET_V_IFACE_CURRENT(GetServerFactory, g_pSource2Server, ISource2Server, SOURCE2SERVER_INTERFACE_VERSION);
-        GET_V_IFACE_CURRENT(GetEngineFactory, g_pNetworkServerService, INetworkServerService, NETWORKSERVERSERVICE_INTERFACE_VERSION);
+        GET_V_IFACE_CURRENT(GetEngineFactory, g_pNetworkServerService, INetworkServerService,
+                            NETWORKSERVERSERVICE_INTERFACE_VERSION);
         GET_V_IFACE_CURRENT(GetEngineFactory, g_pEngineServer, IVEngineServer, INTERFACEVERSION_VENGINESERVER);
 
         g_ISmm = ismm;
@@ -265,23 +341,29 @@ namespace acceleratorcss {
         std::snprintf(crashGamePath, sizeof(crashGamePath), "%s", Paths::GameDirectory().c_str());
         std::snprintf(dumpStoragePath, sizeof(dumpStoragePath), "%s", Paths::Logs().c_str());
 
-        if (crashGamePath[sizeof(crashGamePath) - 1] != '\0') {
-            ACC_CORE_ERROR("[DEBUG] crashGamePath not null-terminated!");
+        if (crashGamePath[sizeof(crashGamePath) - 1] != '\0')
+        {
+            CORE_ERROR("[DEBUG] crashGamePath not null-terminated!");
             return false;
         }
-        if (dumpStoragePath[sizeof(dumpStoragePath) - 1] != '\0') {
-            ACC_CORE_ERROR("[DEBUG] dumpStoragePath not null-terminated!");
+        if (dumpStoragePath[sizeof(dumpStoragePath) - 1] != '\0')
+        {
+            CORE_ERROR("[DEBUG] dumpStoragePath not null-terminated!");
             return false;
         }
 
         struct stat st{};
-        if (stat(dumpStoragePath, &st) == -1) {
-            if (mkdir(dumpStoragePath, 0777) == -1) {
-                ACC_CORE_ERROR("Failed to create logs directory: {}", dumpStoragePath);
+        if (stat(dumpStoragePath, &st) == -1)
+        {
+            if (mkdir(dumpStoragePath, 0777) == -1)
+            {
+                CORE_ERROR("Failed to create logs directory: {}", dumpStoragePath);
                 g_pluginRegistered = false;
                 return false;
             }
-        } else {
+        }
+        else
+        {
             chmod(dumpStoragePath, 0777);
         }
 
@@ -292,9 +374,12 @@ namespace acceleratorcss {
         std::snprintf(crashCommandLine, sizeof(crashCommandLine), "%s",
                       CommandLine() ? CommandLine()->GetCmdLine() : "");
 
-        if (late) {
-            if (auto gs = g_pNetworkServerService->GetIGameServer()) {
-                if (const char* map = gs->GetMapName()) {
+        if (late)
+        {
+            if (auto gs = g_pNetworkServerService->GetIGameServer())
+            {
+                if (const char* map = gs->GetMapName())
+                {
                     StartupServer({}, nullptr, map);
                 }
             }
@@ -302,17 +387,23 @@ namespace acceleratorcss {
 
         g_SMAPI->AddListener(this, this);
 
-        try {
+        try
+        {
             std::ifstream configFile(AcceleratorCSS::paths::ConfigDirectory());
-            if (configFile.is_open()) {
+            if (configFile.is_open())
+            {
                 configFile >> g_Config;
-                ACC_CORE_INFO("Config loaded: {}", AcceleratorCSS::paths::ConfigDirectory());
-            } else {
-                ACC_CORE_WARN("Could not open config: {}", AcceleratorCSS::paths::ConfigDirectory());
+                CORE_INFO("Config loaded: {}", AcceleratorCSS::paths::ConfigDirectory());
+            }
+            else
+            {
+                CORE_WARN("Could not open config: {}", AcceleratorCSS::paths::ConfigDirectory());
                 g_pluginRegistered = false;
             }
-        } catch (const std::exception &e) {
-            ACC_CORE_ERROR("Failed to parse config: {}", e.what());
+        }
+        catch (const std::exception& e)
+        {
+            CORE_ERROR("Failed to parse config: {}", e.what());
             g_pluginRegistered = false;
         }
 
@@ -323,11 +414,12 @@ namespace acceleratorcss {
         sigaction(SIGSEGV, nullptr, &oact);
         SignalHandler = oact.sa_sigaction;
 
-        ACC_CORE_INFO("MM plugin loaded.");
+        CORE_INFO("MM plugin loaded.");
         return true;
     }
 
-    bool AcceleratorCSS_MM::Unload(char *error, size_t maxlen) {
+    bool AcceleratorCSS_MM::Unload(char* error, size_t maxlen)
+    {
         Log::Close();
         g_pluginRegistered = false;
 
@@ -339,37 +431,43 @@ namespace acceleratorcss {
 
         delete exceptionHandler;
 
-        ACC_CORE_INFO("- [ MM plugin unloaded. ] -");
+        CORE_INFO("- [ MM plugin unloaded. ] -");
 
         return true;
     }
 
-    void AcceleratorCSS_MM::AllPluginsLoaded() {
-        std::thread([] {
+    void AcceleratorCSS_MM::AllPluginsLoaded()
+    {
+        std::thread([]
+        {
             std::this_thread::sleep_for(std::chrono::milliseconds(3000));
             if (g_pluginRegistered)
-                ACC_CORE_INFO("- [ MM plugin is active and linked. ] -");
+                CORE_INFO("- [ MM plugin is active and linked. ] -");
             else
-                ACC_CORE_ERROR("- [ MM plugin did not register itself. ] -");
+                CORE_ERROR("- [ MM plugin did not register itself. ] -");
         }).detach();
     }
 
-    void AcceleratorCSS_MM::GameFrame(bool simulating, bool bFirstTick, bool bLastTick) {
+    void AcceleratorCSS_MM::GameFrame(bool simulating, bool bFirstTick, bool bLastTick)
+    {
         bool weHaveBeenFuckedOver = false;
         struct sigaction oact;
 
         auto gs = g_pNetworkServerService->GetIGameServer();
         const char* currentMap = gs ? gs->GetMapName() : nullptr;
-        if (currentMap && *currentMap && lastMap != currentMap) {
+        if (currentMap && *currentMap && lastMap != currentMap)
+        {
             std::snprintf(crashMap, sizeof(crashMap), "%s", currentMap);
             lastMap = currentMap;
-            ACC_CORE_INFO("- [ Detected map change: {} ] -", currentMap);
+            CORE_INFO("- [ Detected map change: {} ] -", currentMap);
         }
 
-        for (int i = 0; i < kNumHandledSignals; ++i) {
+        for (int i = 0; i < kNumHandledSignals; ++i)
+        {
             sigaction(kExceptionSignals[i], NULL, &oact);
 
-            if (oact.sa_sigaction != SignalHandler) {
+            if (oact.sa_sigaction != SignalHandler)
+            {
                 weHaveBeenFuckedOver = true;
                 break;
             }
@@ -392,18 +490,19 @@ namespace acceleratorcss {
             sigaction(kExceptionSignals[i], &act, NULL);
     }
 
-    void AcceleratorCSS_MM::StartupServer(const GameSessionConfiguration_t &config, ISource2WorldSession *,
-                                          const char *pszMapName) {
+    void AcceleratorCSS_MM::StartupServer(const GameSessionConfiguration_t& config, ISource2WorldSession*,
+                                          const char* pszMapName)
+    {
         if (pszMapName && *pszMapName)
             std::snprintf(crashMap, sizeof(crashMap), "%s", pszMapName);
     }
 
-    const char *AcceleratorCSS_MM::GetAuthor() { return "Slynx"; }
-    const char *AcceleratorCSS_MM::GetName() { return "AcceleratorCSS"; }
-    const char *AcceleratorCSS_MM::GetDescription() { return "Local crash handler for C# plugins"; }
-    const char *AcceleratorCSS_MM::GetURL() { return "https://funplay.pro/"; }
-    const char *AcceleratorCSS_MM::GetLicense() { return "GPLv3"; }
-    const char *AcceleratorCSS_MM::GetVersion() { return ACCELERATORCSS_VERSION; }
-    const char *AcceleratorCSS_MM::GetDate() { return __DATE__; }
-    const char *AcceleratorCSS_MM::GetLogTag() { return "ACC"; }
+    const char* AcceleratorCSS_MM::GetAuthor() { return "Slynx"; }
+    const char* AcceleratorCSS_MM::GetName() { return "AcceleratorCSS"; }
+    const char* AcceleratorCSS_MM::GetDescription() { return "Local crash handler for C# plugins"; }
+    const char* AcceleratorCSS_MM::GetURL() { return "https://slynxdev.cz/"; }
+    const char* AcceleratorCSS_MM::GetLicense() { return "GPLv3"; }
+    const char* AcceleratorCSS_MM::GetVersion() { return VERSION_STRING; }
+    const char* AcceleratorCSS_MM::GetDate() { return BUILD_TIMESTAMP; }
+    const char* AcceleratorCSS_MM::GetLogTag() { return "AcceleratorCSS"; }
 }

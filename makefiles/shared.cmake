@@ -20,12 +20,14 @@ endif()
 
 set(CMAKE_STATIC_LIBRARY_PREFIX "")
 
-set(LIBRARIES_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libraries)
-set(SOURCESDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libraries/hl2sdk-cs2)
-set(METAMOD_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libraries/metamod-source)
+set(LIBRARIES_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendor)
+set(SOURCESDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendor/hl2sdk-cs2)
+set(METAMOD_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendor/metamod-source)
 
 set(SOURCESDK ${SOURCESDK_DIR}/${BRANCH})
 set(SOURCESDK_LIB ${SOURCESDK}/lib)
+
+set(BREAKPAD_LIB ${CMAKE_CURRENT_SOURCE_DIR}/vendor/breakpad-build)
 
 add_definitions(-DMETA_IS_SOURCE2 -D_ITERATOR_DEBUG_LEVEL=0)
 
@@ -45,7 +47,9 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
 endif()
 
-include_directories(
+set(
+    ACCELERATORCSS_INCLUDE_DIRECTORIES
+    ${CMAKE_SOURCE_DIR}
     ${SOURCESDK}
     ${SOURCESDK}/thirdparty/protobuf-3.21.8/src
     ${SOURCESDK}/common
@@ -61,16 +65,21 @@ include_directories(
     ${SOURCESDK}/public/schemasystem
     ${METAMOD_DIR}/core
     ${METAMOD_DIR}/core/sourcehook
-    libraries/dyncall/dynload
-    libraries/dyncall/dyncall
-    libraries/spdlog/include
-    libraries/tl
-    libraries/funchook/include
-    libraries/DynoHook/src
-    libraries/moodycamel
-    libraries
+    breakpad-config/linux
+    vendor/breakpad/src
+    vendor/breakpad/src/client
+    vendor/breakpad/src/common
+    vendor/breakpad/src/google_breakpad
+    vendor/breakpad/src/google_breakpad/common
+    vendor/breakpad/src/google_breakpad/processor
+    vendor/breakpad/src/processor
+    vendor/breakpad/src/third_party
+    vendor/breakpad/src/tools
+    vendor/dyncall/dynload
+    vendor/dyncall/dyncall
+    vendor/spdlog/include
+    vendor/DynoHook/src
+    vendor
 )
 
 include(${CMAKE_CURRENT_LIST_DIR}/metamod/configure_metamod.cmake)
-
-

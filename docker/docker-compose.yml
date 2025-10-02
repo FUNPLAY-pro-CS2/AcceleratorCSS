@@ -1,6 +1,6 @@
 services:
   builder:
-    image: xmake-builder
+    image: cmake-builder
     build:
       context: ..
       dockerfile: docker/Dockerfile

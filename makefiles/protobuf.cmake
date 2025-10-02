@@ -2,25 +2,25 @@
 # Based on their work at https://github.com/Poggicek/StickerInspect
 
 set(PROTO_TARGETS
-    ${PROJECT_SOURCE_DIR}/libraries/Protobufs/csgo/network_connection.proto
-    ${PROJECT_SOURCE_DIR}/libraries/Protobufs/csgo/networkbasetypes.proto
-    ${PROJECT_SOURCE_DIR}/libraries/Protobufs/csgo/cs_gameevents.proto
-    ${PROJECT_SOURCE_DIR}/libraries/Protobufs/csgo/engine_gcmessages.proto
-    ${PROJECT_SOURCE_DIR}/libraries/Protobufs/csgo/gcsdk_gcmessages.proto
-    ${PROJECT_SOURCE_DIR}/libraries/Protobufs/csgo/cstrike15_gcmessages.proto
-    ${PROJECT_SOURCE_DIR}/libraries/Protobufs/csgo/cstrike15_usermessages.proto
-    ${PROJECT_SOURCE_DIR}/libraries/Protobufs/csgo/netmessages.proto
-    ${PROJECT_SOURCE_DIR}/libraries/Protobufs/csgo/steammessages.proto
-    ${PROJECT_SOURCE_DIR}/libraries/Protobufs/csgo/usermessages.proto
-    ${PROJECT_SOURCE_DIR}/libraries/Protobufs/csgo/gameevents.proto
-    ${PROJECT_SOURCE_DIR}/libraries/Protobufs/csgo/clientmessages.proto
-    ${PROJECT_SOURCE_DIR}/libraries/Protobufs/csgo/te.proto
+    ${PROJECT_SOURCE_DIR}/vendor/Protobufs/csgo/network_connection.proto
+    ${PROJECT_SOURCE_DIR}/vendor/Protobufs/csgo/networkbasetypes.proto
+    ${PROJECT_SOURCE_DIR}/vendor/Protobufs/csgo/cs_gameevents.proto
+    ${PROJECT_SOURCE_DIR}/vendor/Protobufs/csgo/engine_gcmessages.proto
+    ${PROJECT_SOURCE_DIR}/vendor/Protobufs/csgo/gcsdk_gcmessages.proto
+    ${PROJECT_SOURCE_DIR}/vendor/Protobufs/csgo/cstrike15_gcmessages.proto
+    ${PROJECT_SOURCE_DIR}/vendor/Protobufs/csgo/cstrike15_usermessages.proto
+    ${PROJECT_SOURCE_DIR}/vendor/Protobufs/csgo/netmessages.proto
+    ${PROJECT_SOURCE_DIR}/vendor/Protobufs/csgo/steammessages.proto
+    ${PROJECT_SOURCE_DIR}/vendor/Protobufs/csgo/usermessages.proto
+    ${PROJECT_SOURCE_DIR}/vendor/Protobufs/csgo/gameevents.proto
+    ${PROJECT_SOURCE_DIR}/vendor/Protobufs/csgo/clientmessages.proto
+    ${PROJECT_SOURCE_DIR}/vendor/Protobufs/csgo/te.proto
 )
 
 if(UNIX)
-    set(PROTOC_EXECUTABLE ${PROJECT_SOURCE_DIR}/libraries/hl2sdk-cs2/devtools/bin/linux/protoc)
+    set(PROTOC_EXECUTABLE ${PROJECT_SOURCE_DIR}/vendor/hl2sdk-cs2/devtools/bin/linux/protoc)
 elseif(WIN32)
-    set(PROTOC_EXECUTABLE ${PROJECT_SOURCE_DIR}/libraries/hl2sdk-cs2/devtools/bin/protoc.exe)
+    set(PROTOC_EXECUTABLE ${PROJECT_SOURCE_DIR}/vendor/hl2sdk-cs2/devtools/bin/protoc.exe)
 endif()
 
 foreach(PROTO_TARGET ${PROTO_TARGETS})
@@ -37,7 +37,7 @@ file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/protobufcompiler)
 
 add_custom_command(
     OUTPUT ${PROTO_OUTPUT}
-    COMMAND "${PROTOC_EXECUTABLE}" -I ${PROJECT_SOURCE_DIR}/libraries/hl2sdk-cs2/thirdparty/protobuf-3.21.8/src --proto_path=${PROJECT_SOURCE_DIR}/libraries/Protobufs/csgo ${PROTO_PATHS} --cpp_out=${CMAKE_CURRENT_BINARY_DIR}/protobufcompiler ${PROTO_INPUT}
+    COMMAND "${PROTOC_EXECUTABLE}" -I ${PROJECT_SOURCE_DIR}/vendor/hl2sdk-cs2/thirdparty/protobuf-3.21.8/src --proto_path=${PROJECT_SOURCE_DIR}/vendor/Protobufs/csgo ${PROTO_PATHS} --cpp_out=${CMAKE_CURRENT_BINARY_DIR}/protobufcompiler ${PROTO_INPUT}
     COMMENT "Generating protobuf file"
 )
 
@@ -47,13 +47,13 @@ add_library(Protobufs STATIC
 
 target_include_directories(Protobufs
                            PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/protobufcompiler
-                           PUBLIC ${PROJECT_SOURCE_DIR}/libraries/hl2sdk-cs2/thirdparty/protobuf-3.21.8/src
+                           PUBLIC ${PROJECT_SOURCE_DIR}/vendor/hl2sdk-cs2/thirdparty/protobuf-3.21.8/src
 )
 
 if(WIN32)
-    target_link_libraries(Protobufs PUBLIC ${PROJECT_SOURCE_DIR}/libraries/hl2sdk-cs2/lib/public/win64/2015/libprotobuf.lib)
+    target_link_libraries(Protobufs PUBLIC ${PROJECT_SOURCE_DIR}/vendor/hl2sdk-cs2/lib/public/win64/2015/libprotobuf.lib)
 elseif(UNIX)
-    target_link_libraries(Protobufs PUBLIC ${PROJECT_SOURCE_DIR}/libraries/hl2sdk-cs2/lib/linux64/release/libprotobuf.a)
+    target_link_libraries(Protobufs PUBLIC ${PROJECT_SOURCE_DIR}/vendor/hl2sdk-cs2/lib/linux64/release/libprotobuf.a)
 endif()
 set_target_properties(Protobufs PROPERTIES LINKER_LANGUAGE CXX)
 set_target_properties(Protobufs PROPERTIES FOLDER SDK)

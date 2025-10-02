@@ -1,5 +1,5 @@
 "Metamod Plugin"
 {
-	"alias"	"counterstrikesharp"
-	"file"	"addons/counterstrikesharp/bin/${COUNTERSTRIKESHARP_VDF_PLATFORM}/counterstrikesharp"
+	"alias"	"AcceleratorCSS"
+	"file"	"addons/AcceleratorCSS/bin/${ACCELERATORCSS_VDF_PLATFORM}/AcceleratorCSS"
 }

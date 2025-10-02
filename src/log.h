@@ -19,10 +19,10 @@ namespace acceleratorcss {
     };
 
     // Shortcuts
-#define ACC_CORE_TRACE(...)    ::acceleratorcss::Log::GetLogger()->trace(__VA_ARGS__)
-#define ACC_CORE_DEBUG(...)    ::acceleratorcss::Log::GetLogger()->debug(__VA_ARGS__)
-#define ACC_CORE_INFO(...)     ::acceleratorcss::Log::GetLogger()->info(__VA_ARGS__)
-#define ACC_CORE_WARN(...)     ::acceleratorcss::Log::GetLogger()->warn(__VA_ARGS__)
-#define ACC_CORE_ERROR(...)    ::acceleratorcss::Log::GetLogger()->error(__VA_ARGS__)
-#define ACC_CORE_CRITICAL(...) ::acceleratorcss::Log::GetLogger()->critical(__VA_ARGS__)
+#define CORE_TRACE(...)    ::acceleratorcss::Log::GetLogger()->trace(__VA_ARGS__)
+#define CORE_DEBUG(...)    ::acceleratorcss::Log::GetLogger()->debug(__VA_ARGS__)
+#define CORE_INFO(...)     ::acceleratorcss::Log::GetLogger()->info(__VA_ARGS__)
+#define CORE_WARN(...)     ::acceleratorcss::Log::GetLogger()->warn(__VA_ARGS__)
+#define CORE_ERROR(...)    ::acceleratorcss::Log::GetLogger()->error(__VA_ARGS__)
+#define CORE_CRITICAL(...) ::acceleratorcss::Log::GetLogger()->critical(__VA_ARGS__)
 }

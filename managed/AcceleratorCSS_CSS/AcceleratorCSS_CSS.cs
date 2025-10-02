@@ -21,7 +21,7 @@ public class AcceleratorCSS_CSS : BasePlugin
     public override string ModuleVersion => "1.0.3";
     private Harmony? _harmony;
     public static bool Lightweight;
-    private static RegisterCallbackTraceBinary? NativeBinary;
+    private static RegisterManagedMethodDelegate? RegisterManagedMethod;
     private static string[] FilterList = [];
 
     [StructLayout(LayoutKind.Sequential)]
@@ -58,8 +58,8 @@ public class AcceleratorCSS_CSS : BasePlugin
         {
             var handle = NativeLibrary.Load(path);
 
-            var fnPtr = NativeLibrary.GetExport(handle, "RegisterCallbackTraceBinary");
-            NativeBinary = Marshal.GetDelegateForFunctionPointer<RegisterCallbackTraceBinary>(fnPtr);
+            var regPtr = NativeLibrary.GetExport(handle, "RegisterManagedMethod");
+            RegisterManagedMethod = Marshal.GetDelegateForFunctionPointer<RegisterManagedMethodDelegate>(regPtr);
 
             var initPtr = NativeLibrary.GetExport(handle, "CssPluginRegistered");
             var initFn = Marshal.GetDelegateForFunctionPointer<CssPluginRegisteredDelegate>(initPtr);
@@ -179,11 +179,8 @@ public class AcceleratorCSS_CSS : BasePlugin
                         totalMethods++;
                         try
                         {
-                            var prefix = new HarmonyMethod(typeof(AcceleratorCSS_CSS).GetMethod(
-                                nameof(TracePrefix),
-                                BindingFlags.Static | BindingFlags.NonPublic));
-
-                            _harmony.Patch(method, prefix: prefix);
+                            var fnPtr = method.MethodHandle.GetFunctionPointer();
+                            RegisterManagedMethod?.Invoke($"{method.DeclaringType?.FullName}::{method.Name}", fnPtr);
                             patchedMethods++;
                         }
                         catch (Exception ex)
@@ -209,50 +206,6 @@ public class AcceleratorCSS_CSS : BasePlugin
     private static bool ShouldFilter(string name)
     {
         return FilterList.Any(filter => name.Contains(filter, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static bool TracePrefix(MethodBase __originalMethod, object __instance, object[]? __args)
-    {
-        try
-        {
-            var name = Trim($"{__originalMethod.DeclaringType?.FullName}::{__originalMethod?.Name}", 512);
-
-            if (ShouldFilter(name))
-                return true;
-
-            string profile = Lightweight ? "LW" : Trim(string.Join(", ", __args?.Select(SafeToString) ?? []), 2048);
-            string stack = Lightweight ? "LW" : Trim(new StackTrace(2, true).ToString(), 4096);
-            SendBinary(name, profile, stack);
-        }
-        catch
-        {
-            // ignored
-        }
-
-        return true;
-    }
-
-    private static void SendBinary(string name, string profile, string stack)
-    {
-        if (NativeBinary == null)
-        {
-            Prints.ServerLog("[AcceleratorCSS_CSS] SendBinary skipped (NativeBinary == null)", ConsoleColor.Red);
-            return;
-        }
-
-        var nameBytes = Encoding.UTF8.GetBytes(name);
-        var profileBytes = Encoding.UTF8.GetBytes(profile);
-        var stackBytes = Encoding.UTF8.GetBytes(stack);
-
-        var buffer = new byte[6 + nameBytes.Length + profileBytes.Length + stackBytes.Length];
-        BitConverter.GetBytes((ushort)nameBytes.Length).CopyTo(buffer, 0);
-        BitConverter.GetBytes((ushort)profileBytes.Length).CopyTo(buffer, 2);
-        BitConverter.GetBytes((ushort)stackBytes.Length).CopyTo(buffer, 4);
-        Buffer.BlockCopy(nameBytes, 0, buffer, 6, nameBytes.Length);
-        Buffer.BlockCopy(profileBytes, 0, buffer, 6 + nameBytes.Length, profileBytes.Length);
-        Buffer.BlockCopy(stackBytes, 0, buffer, 6 + nameBytes.Length + profileBytes.Length, stackBytes.Length);
-
-        NativeBinary(buffer, buffer.Length);
     }
 
     private static string SafeToString(object? obj)
@@ -301,7 +254,7 @@ public class AcceleratorCSS_CSS : BasePlugin
     private delegate PluginConfig CssPluginRegisteredDelegate();
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate void RegisterCallbackTraceBinary(byte[] data, int len);
+    private delegate void RegisterManagedMethodDelegate(string name, IntPtr fnPtr);
 
     private static IEnumerable<MethodInfo> GetAllMethods(Type? type)
     {

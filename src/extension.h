@@ -48,7 +48,7 @@ namespace acceleratorcss {
 
     inline json g_Config;
 
-    extern AcceleratorCSS_MM gPlugin;
+    extern AcceleratorCSS_MM g_iPlugin;
 
     namespace Paths {
         static std::string gameDirectory;
