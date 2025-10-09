@@ -21,13 +21,13 @@ cmake .. \
 echo "=== Building with GCC | RelWithDebInfo | All ==="
 cmake --build . --config RelWithDebInfo -j"$(nproc)"
 
-mkdir -p build/addons/metamod
-mkdir -p build/addons/AcceleratorCSS
-mkdir -p build/addons/AcceleratorCSS/bin/linuxsteamrt64
-mkdir -p build/addons/counterstrikesharp/plugins
-mkdir -p build/addons/counterstrikesharp/shared/0Harmony
+mkdir -p addons/metamod
+mkdir -p addons/AcceleratorCSS
+mkdir -p addons/AcceleratorCSS/bin/linuxsteamrt64
+mkdir -p addons/counterstrikesharp/plugins
+mkdir -p addons/counterstrikesharp/shared/0Harmony
 
-cp managed/0Harmony.dll \
-   build/addons/counterstrikesharp/shared/0Harmony/0Harmony.dll
+cp ../managed/0Harmony.dll \
+   addons/counterstrikesharp/shared/0Harmony/0Harmony.dll
 
-dotnet publish managed/AcceleratorCSS_CSS/AcceleratorCSS_CSS.csproj -c Release -o build/addons/counterstrikesharp/plugins/AcceleratorCSS_CSS
+dotnet publish ../managed/AcceleratorCSS_CSS/AcceleratorCSS_CSS.csproj -c Release -o addons/counterstrikesharp/plugins/AcceleratorCSS_CSS

@@ -7,16 +7,16 @@
 #include "log.h"
 
 #include "dyncall/dyncall/dyncall.h"
+#include "funchook.h"
 
-#include "pch.h"
-#include "dynohook/core.h"
-#include "dynohook/manager.h"
+#include <sys/mman.h>
+#include <unistd.h>
+#include <cstring>
+#include <cstdint>
+#include <cstdio>
+#include <cerrno>
+#include <cassert>
 
-#ifdef _WIN32
-#include "dynohook/conventions/x64/x64MsFastcall.h"
-#else
-#include "dynohook/conventions/x64/x64SystemVcall.h"
-#endif
 #include <nlohmann/json.hpp>
 
 #include <entitysystem.h>
@@ -59,9 +59,12 @@
 #include "processor/simple_symbol_supplier.h"
 #include "processor/stackwalk_common.h"
 #include "processor/pathname_stripper.h"
+#include "spdlog/fmt/bundled/ranges.h"
 
 #define VERSION_STRING SEMVER " @ " GITHUB_SHA
 #define BUILD_TIMESTAMP __DATE__ " " __TIME__
+
+namespace fs = std::filesystem;
 
 size_t g_MaxCallbackTrace = 10;
 
@@ -72,12 +75,17 @@ struct CallbackTraceEntry
     std::string callerStack;
 };
 
-using namespace dyno;
-namespace fs = std::filesystem;
+struct ManagedSig {
+    std::string ret;
+    std::vector<std::string> args;
+};
 
 std::vector<CallbackTraceEntry> g_CallbackTraceBuffer;
 size_t g_CallbackTraceIndex = 0;
 std::mutex g_CallbackTraceMutex;
+static std::unordered_map<void*, ManagedSig> g_Signatures;
+static std::unordered_map<void*, std::string> g_HookNames;
+static std::unordered_map<void*, funchook_t*> g_Hooks;
 
 ISmmAPI* g_ISmm = nullptr;
 
@@ -121,40 +129,119 @@ struct PluginConfig
 
 PluginConfig config{};
 
-static ReturnAction MyManagedPre(HookType type, Hook& hook)
-{
-    CORE_INFO("[DynoHook] Managed method called (pre)");
-    return ReturnAction::Ignored;
+static void LogCall(const char* name) {
+    CORE_INFO("[ManagedCall] {}", name);
 }
 
-static ReturnAction MyManagedPost(HookType type, Hook& hook)
+// === generic trampoline ===
+// protože každá funkce má jiný počet argů, dyncall se použije na znovu-volání originálu
+static void* GenericPreLogger(void* fnPtr)
 {
-    CORE_INFO("[DynoHook] Managed method finished (post)");
-    return ReturnAction::Ignored;
+    auto it = g_HookNames.find(fnPtr);
+    if (it != g_HookNames.end())
+        CORE_INFO("[Managed PRE] {}", it->second);
+    else
+        CORE_INFO("[Managed PRE] {}", fnPtr);
+
+    auto sigIt = g_Signatures.find(fnPtr);
+    if (sigIt == g_Signatures.end())
+        return nullptr;
+
+    auto& sig = sigIt->second;
+
+    DCCallVM* vm = dcNewCallVM(4096);
+    dcMode(vm, DC_CALL_C_DEFAULT);
+
+    // --- placeholder argy ---
+    // tady můžeš reálně doplnit hodnoty (např. null pointers)
+    for (auto& arg : sig.args)
+    {
+        if (arg == "Int32" || arg == "UInt32") dcArgInt(vm, 0);
+        else if (arg == "Single") dcArgFloat(vm, 0.0f);
+        else if (arg == "Double") dcArgDouble(vm, 0.0);
+        else if (arg == "Boolean") dcArgBool(vm, false);
+        else dcArgPointer(vm, nullptr);
+    }
+
+    void* retPtr = nullptr;
+
+    if (sig.ret == "Void")
+        dcCallVoid(vm, fnPtr);
+    else if (sig.ret == "Int32" || sig.ret == "UInt32")
+        retPtr = (void*)(uintptr_t)dcCallInt(vm, fnPtr);
+    else if (sig.ret == "Single")
+        retPtr = (void*)(uintptr_t)dcCallFloat(vm, fnPtr);
+    else if (sig.ret == "Double")
+        retPtr = (void*)(uintptr_t)dcCallDouble(vm, fnPtr);
+    else if (sig.ret == "Boolean")
+        retPtr = (void*)(uintptr_t)dcCallBool(vm, fnPtr);
+    else
+        retPtr = dcCallPointer(vm, fnPtr);
+
+    dcFree(vm);
+
+    CORE_INFO("[Managed RET] {} -> {}", fnPtr, (uintptr_t)retPtr);
+    return retPtr;
 }
 
-DLL_EXPORT void RegisterManagedMethod(const char* name, void* fnPtr)
+DLL_EXPORT void RegisterManagedMethodEx(
+    const char* name,
+    void* fnPtr,
+    const char* returnType,
+    const char** argTypes,
+    int argCount)
 {
     if (!name || !fnPtr)
         return;
 
-    auto& manager = HookManager::Get();
+    ManagedSig sig;
+    sig.ret = returnType ? returnType : "void";
+    for (int i = 0; i < argCount; ++i)
+        sig.args.emplace_back(argTypes[i] ? argTypes[i] : "void*");
 
-    auto detour = manager.hook(
-        fnPtr,
-        [] {
-#ifdef _WIN32
-            return new x64MsFastcall({}, DataType::Void);
-#else
-            return new x64SystemVcall({}, DataType::Void);
-#endif
-        }
-    );
+    g_Signatures[fnPtr] = sig;
+    g_HookNames[fnPtr] = name;
 
-    detour->addCallback(HookType::Pre, reinterpret_cast<HookHandler*>(&MyManagedPre));
-    detour->addCallback(HookType::Post, reinterpret_cast<HookHandler*>(&MyManagedPost));
+    funchook_t* hook = funchook_create();
 
-    CORE_INFO("[DynoHook] Hook installed for {} at {}", name, fnPtr);
+    auto trampoline = +[](void* ctx) -> void* {
+        return GenericPreLogger(ctx);
+    };
+
+    funchook_prepare(hook, &fnPtr, (void*)trampoline);
+    if (funchook_install(hook, 0) == 0) {
+        g_Hooks[fnPtr] = hook;
+        CORE_INFO("[Funchook] Hooked {} @ {}", name, fnPtr);
+    } else {
+        CORE_ERROR("[Funchook] Failed hook for {} @ {}", name, fnPtr);
+    }
+
+    std::vector<std::string> nativeArgs;
+    for (auto& arg : sig.args)
+    {
+        if (arg == "Int32" || arg == "UInt32") nativeArgs.push_back("int");
+        else if (arg == "Single") nativeArgs.push_back("float");
+        else if (arg == "Double") nativeArgs.push_back("double");
+        else if (arg == "Boolean") nativeArgs.push_back("bool");
+        else if (arg.find("CCS") != std::string::npos ||
+                 arg.find("NativeObject") != std::string::npos)
+            nativeArgs.push_back("void*");
+        else
+            nativeArgs.push_back("void*");
+    }
+
+    std::string nativeRet;
+    if (sig.ret == "Void") nativeRet = "void";
+    else if (sig.ret == "Boolean") nativeRet = "bool";
+    else if (sig.ret == "Single") nativeRet = "float";
+    else if (sig.ret == "Double") nativeRet = "double";
+    else if (sig.ret.find("CCS") != std::string::npos) nativeRet = "void*";
+    else nativeRet = "void*";
+
+    CORE_INFO("[ManagedSig] {}({}) -> {}",
+              name,
+              fmt::join(nativeArgs, ", "),
+              nativeRet);
 }
 
 // DLL_EXPORT void RegisterCallbackTraceBinary(const void* data, size_t len)
@@ -322,7 +409,8 @@ SH_DECL_HOOK3_void(IServerGameDLL, GameFrame, SH_NOATTRIB, 0, bool, bool, bool);
 SH_DECL_HOOK3_void(INetworkServerService, StartupServer, SH_NOATTRIB, 0, const GameSessionConfiguration_t&,
                    ISource2WorldSession*, const char*);
 
-namespace acceleratorcss
+namespace
+acceleratorcss
 {
     AcceleratorCSS_MM g_iPlugin;
 
@@ -367,7 +455,8 @@ namespace acceleratorcss
             chmod(dumpStoragePath, 0777);
         }
 
-        SH_ADD_HOOK(IServerGameDLL, GameFrame, g_pSource2Server, SH_MEMBER(this, &AcceleratorCSS_MM::GameFrame), true);
+        SH_ADD_HOOK(IServerGameDLL, GameFrame, g_pSource2Server, SH_MEMBER(this, &AcceleratorCSS_MM::GameFrame),
+                    true);
         SH_ADD_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService,
                     SH_MEMBER(this, &AcceleratorCSS_MM::StartupServer), true);
 
@@ -407,12 +496,13 @@ namespace acceleratorcss
             g_pluginRegistered = false;
         }
 
-        google_breakpad::MinidumpDescriptor descriptor(dumpStoragePath);
-        exceptionHandler = new google_breakpad::ExceptionHandler(descriptor, nullptr, dumpCallback, nullptr, true, -1);
-
-        struct sigaction oact{};
-        sigaction(SIGSEGV, nullptr, &oact);
-        SignalHandler = oact.sa_sigaction;
+        // google_breakpad::MinidumpDescriptor descriptor(dumpStoragePath);
+        // exceptionHandler = new google_breakpad::ExceptionHandler(descriptor, nullptr, dumpCallback, nullptr, true,
+        //                                                          -1);
+        //
+        // struct sigaction oact{};
+        // sigaction(SIGSEGV, nullptr, &oact);
+        // SignalHandler = oact.sa_sigaction;
 
         CORE_INFO("MM plugin loaded.");
         return true;
@@ -450,44 +540,44 @@ namespace acceleratorcss
 
     void AcceleratorCSS_MM::GameFrame(bool simulating, bool bFirstTick, bool bLastTick)
     {
-        bool weHaveBeenFuckedOver = false;
-        struct sigaction oact;
-
-        auto gs = g_pNetworkServerService->GetIGameServer();
-        const char* currentMap = gs ? gs->GetMapName() : nullptr;
-        if (currentMap && *currentMap && lastMap != currentMap)
-        {
-            std::snprintf(crashMap, sizeof(crashMap), "%s", currentMap);
-            lastMap = currentMap;
-            CORE_INFO("- [ Detected map change: {} ] -", currentMap);
-        }
-
-        for (int i = 0; i < kNumHandledSignals; ++i)
-        {
-            sigaction(kExceptionSignals[i], NULL, &oact);
-
-            if (oact.sa_sigaction != SignalHandler)
-            {
-                weHaveBeenFuckedOver = true;
-                break;
-            }
-        }
-
-        if (!weHaveBeenFuckedOver)
-            return;
-
-        struct sigaction act;
-        memset(&act, 0, sizeof(act));
-        sigemptyset(&act.sa_mask);
-
-        for (int i = 0; i < kNumHandledSignals; ++i)
-            sigaddset(&act.sa_mask, kExceptionSignals[i]);
-
-        act.sa_sigaction = SignalHandler;
-        act.sa_flags = SA_ONSTACK | SA_SIGINFO;
-
-        for (int i = 0; i < kNumHandledSignals; ++i)
-            sigaction(kExceptionSignals[i], &act, NULL);
+        // bool weHaveBeenFuckedOver = false;
+        // struct sigaction oact;
+        //
+        // auto gs = g_pNetworkServerService->GetIGameServer();
+        // const char* currentMap = gs ? gs->GetMapName() : nullptr;
+        // if (currentMap && *currentMap && lastMap != currentMap)
+        // {
+        //     std::snprintf(crashMap, sizeof(crashMap), "%s", currentMap);
+        //     lastMap = currentMap;
+        //     CORE_INFO("- [ Detected map change: {} ] -", currentMap);
+        // }
+        //
+        // for (int i = 0; i < kNumHandledSignals; ++i)
+        // {
+        //     sigaction(kExceptionSignals[i], NULL, &oact);
+        //
+        //     if (oact.sa_sigaction != SignalHandler)
+        //     {
+        //         weHaveBeenFuckedOver = true;
+        //         break;
+        //     }
+        // }
+        //
+        // if (!weHaveBeenFuckedOver)
+        //     return;
+        //
+        // struct sigaction act;
+        // memset(&act, 0, sizeof(act));
+        // sigemptyset(&act.sa_mask);
+        //
+        // for (int i = 0; i < kNumHandledSignals; ++i)
+        //     sigaddset(&act.sa_mask, kExceptionSignals[i]);
+        //
+        // act.sa_sigaction = SignalHandler;
+        // act.sa_flags = SA_ONSTACK | SA_SIGINFO;
+        //
+        // for (int i = 0; i < kNumHandledSignals; ++i)
+        //     sigaction(kExceptionSignals[i], &act, NULL);
     }
 
     void AcceleratorCSS_MM::StartupServer(const GameSessionConfiguration_t& config, ISource2WorldSession*,
@@ -497,12 +587,43 @@ namespace acceleratorcss
             std::snprintf(crashMap, sizeof(crashMap), "%s", pszMapName);
     }
 
-    const char* AcceleratorCSS_MM::GetAuthor() { return "Slynx"; }
-    const char* AcceleratorCSS_MM::GetName() { return "AcceleratorCSS"; }
-    const char* AcceleratorCSS_MM::GetDescription() { return "Local crash handler for C# plugins"; }
-    const char* AcceleratorCSS_MM::GetURL() { return "https://slynxdev.cz/"; }
-    const char* AcceleratorCSS_MM::GetLicense() { return "GPLv3"; }
-    const char* AcceleratorCSS_MM::GetVersion() { return VERSION_STRING; }
-    const char* AcceleratorCSS_MM::GetDate() { return BUILD_TIMESTAMP; }
-    const char* AcceleratorCSS_MM::GetLogTag() { return "AcceleratorCSS"; }
+    const char* AcceleratorCSS_MM::GetAuthor()
+    {
+        return "Slynx";
+    }
+
+    const char* AcceleratorCSS_MM::GetName()
+    {
+        return "AcceleratorCSS";
+    }
+
+    const char* AcceleratorCSS_MM::GetDescription()
+    {
+        return "Local crash handler for C# plugins";
+    }
+
+    const char* AcceleratorCSS_MM::GetURL()
+    {
+        return "https://slynxdev.cz/";
+    }
+
+    const char* AcceleratorCSS_MM::GetLicense()
+    {
+        return "GPLv3";
+    }
+
+    const char* AcceleratorCSS_MM::GetVersion()
+    {
+        return VERSION_STRING;
+    }
+
+    const char* AcceleratorCSS_MM::GetDate()
+    {
+        return BUILD_TIMESTAMP;
+    }
+
+    const char* AcceleratorCSS_MM::GetLogTag()
+    {
+        return "AcceleratorCSS";
+    }
 }

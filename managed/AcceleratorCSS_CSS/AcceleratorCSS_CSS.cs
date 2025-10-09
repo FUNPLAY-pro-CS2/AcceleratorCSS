@@ -21,7 +21,7 @@ public class AcceleratorCSS_CSS : BasePlugin
     public override string ModuleVersion => "1.0.3";
     private Harmony? _harmony;
     public static bool Lightweight;
-    private static RegisterManagedMethodDelegate? RegisterManagedMethod;
+    private static RegisterManagedMethodExtendedDelegate? RegisterManagedMethodEx;
     private static string[] FilterList = [];
 
     [StructLayout(LayoutKind.Sequential)]
@@ -58,8 +58,9 @@ public class AcceleratorCSS_CSS : BasePlugin
         {
             var handle = NativeLibrary.Load(path);
 
-            var regPtr = NativeLibrary.GetExport(handle, "RegisterManagedMethod");
-            RegisterManagedMethod = Marshal.GetDelegateForFunctionPointer<RegisterManagedMethodDelegate>(regPtr);
+            var regPtr = NativeLibrary.GetExport(handle, "RegisterManagedMethodEx");
+            RegisterManagedMethodEx =
+                Marshal.GetDelegateForFunctionPointer<RegisterManagedMethodExtendedDelegate>(regPtr);
 
             var initPtr = NativeLibrary.GetExport(handle, "CssPluginRegistered");
             var initFn = Marshal.GetDelegateForFunctionPointer<CssPluginRegisteredDelegate>(initPtr);
@@ -112,12 +113,10 @@ public class AcceleratorCSS_CSS : BasePlugin
             {
                 if (asm == typeof(AcceleratorCSS_CSS).Assembly) continue;
 
-                // ignoruj systemové
                 if (asm.FullName != null && (asm.FullName.StartsWith("System", StringComparison.OrdinalIgnoreCase) ||
                                              asm.FullName.StartsWith("Microsoft", StringComparison.OrdinalIgnoreCase)))
                     continue;
 
-                // koukni, jestli má reference na CounterStrikeSharp
                 if (!ReferencesCounterStrikeSharpApi(asm)) continue;
 
                 totalAssemblies++;
@@ -180,7 +179,15 @@ public class AcceleratorCSS_CSS : BasePlugin
                         try
                         {
                             var fnPtr = method.MethodHandle.GetFunctionPointer();
-                            RegisterManagedMethod?.Invoke($"{method.DeclaringType?.FullName}::{method.Name}", fnPtr);
+                            var returnType = method.ReturnType.Name;
+                            var argTypes = method.GetParameters().Select(p => p.ParameterType.Name).ToArray();
+                            RegisterManagedMethodEx?.Invoke(
+                                $"{method.DeclaringType?.FullName}::{method.Name}",
+                                fnPtr,
+                                returnType,
+                                argTypes,
+                                argTypes.Length
+                            );
                             patchedMethods++;
                         }
                         catch (Exception ex)
@@ -201,28 +208,6 @@ public class AcceleratorCSS_CSS : BasePlugin
             ConsoleColor.Yellow);
 
         Prints.ServerLog("[AcceleratorCSS_CSS] All methods patched with Harmony.", ConsoleColor.DarkGreen);
-    }
-
-    private static bool ShouldFilter(string name)
-    {
-        return FilterList.Any(filter => name.Contains(filter, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static string SafeToString(object? obj)
-    {
-        try
-        {
-            return obj?.ToString() ?? "null";
-        }
-        catch
-        {
-            return "[error]";
-        }
-    }
-
-    private static string Trim(string str, int max)
-    {
-        return str.Length <= max ? str : str[..max];
     }
 
     private static Type[] SafeGetTypes(Assembly asm)
@@ -254,7 +239,12 @@ public class AcceleratorCSS_CSS : BasePlugin
     private delegate PluginConfig CssPluginRegisteredDelegate();
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate void RegisterManagedMethodDelegate(string name, IntPtr fnPtr);
+    private delegate void RegisterManagedMethodExtendedDelegate(
+        string name,
+        IntPtr fnPtr,
+        string returnType,
+        string[] argTypes,
+        int argCount);
 
     private static IEnumerable<MethodInfo> GetAllMethods(Type? type)
     {

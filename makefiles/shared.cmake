@@ -47,8 +47,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
 endif()
 
-set(
-    ACCELERATORCSS_INCLUDE_DIRECTORIES
+include_directories(
     ${CMAKE_SOURCE_DIR}
     ${SOURCESDK}
     ${SOURCESDK}/thirdparty/protobuf-3.21.8/src
@@ -78,7 +77,8 @@ set(
     vendor/dyncall/dynload
     vendor/dyncall/dyncall
     vendor/spdlog/include
-    vendor/DynoHook/src
+    vendor/funchook/include
+    vendor/tl
     vendor
 )
 

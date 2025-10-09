@@ -7,15 +7,17 @@ include("makefiles/shared.cmake")
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
+set(FMT_WERROR OFF CACHE BOOL "" FORCE)
+set(FUNCHOOK_BUILD_TESTS OFF CACHE BOOL "Disable building tests for funchook." FORCE)
 set(ZYDIS_BUILD_EXAMPLES OFF CACHE BOOL "Disable building examples for Zydis." FORCE)
 set(ZYDIS_BUILD_TOOLS OFF CACHE BOOL "Disable building tools for Zydis." FORCE)
-set(DYNOHOOK_BUILD_TESTS OFF CACHE BOOL "Disable building tests for funchook." FORCE)
 
 add_subdirectory(vendor/spdlog)
 add_subdirectory(vendor/dyncall)
-add_subdirectory(vendor/DynoHook)
+add_subdirectory(vendor/funchook)
+add_subdirectory(vendor/zlib)
 
-set_property(TARGET dynohook PROPERTY DYNO_ARCH_X86 64)
+set_property(TARGET funchook-static PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 include("makefiles/protobuf.cmake")
 
@@ -71,7 +73,6 @@ target_include_directories(
     ${PROJECT_NAME}
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${ACCELERATORCSS_INCLUDE_DIRECTORIES}
 )
 
 if(LINUX)
