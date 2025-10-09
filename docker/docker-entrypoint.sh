@@ -14,15 +14,15 @@ mkdir build
 cd build
 
 cmake .. \
+  -G Ninja \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo \
   -DCMAKE_C_COMPILER=gcc \
   -DCMAKE_CXX_COMPILER=g++
 
-echo "=== Building with GCC | RelWithDebInfo | All ==="
+echo "=== Building with Ninja + GCC | RelWithDebInfo | All ==="
 cmake --build . --config RelWithDebInfo -j"$(nproc)"
 
 mkdir -p addons/metamod
-mkdir -p addons/AcceleratorCSS
 mkdir -p addons/AcceleratorCSS/bin/linuxsteamrt64
 mkdir -p addons/counterstrikesharp/plugins
 mkdir -p addons/counterstrikesharp/shared/0Harmony
