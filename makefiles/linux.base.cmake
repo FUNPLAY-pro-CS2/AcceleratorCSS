@@ -31,5 +31,6 @@ set(
     dyncall_s
     distorm
     funchook-static
+    khook_lib
     zlibstatic
 )

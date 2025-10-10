@@ -18,27 +18,25 @@ using json = nlohmann::json;
 namespace acceleratorcss {
     class AcceleratorCSS_MM : public ISmmPlugin, public IMetamodListener {
     public:
-        bool Load(PluginId id, ISmmAPI *ismm, char *error, size_t maxlen, bool late);
+        bool Load(PluginId id, ISmmAPI *ismm, char *error, size_t maxlen, bool late) override;
 
-        bool Unload(char *error, size_t maxlen);
+        bool Unload(char *error, size_t maxlen) override;
 
-        void AllPluginsLoaded();
+        const char *GetAuthor() override;
 
-        const char *GetAuthor();
+        const char *GetName() override;
 
-        const char *GetName();
+        const char *GetDescription() override;
 
-        const char *GetDescription();
+        const char *GetURL() override;
 
-        const char *GetURL();
+        const char *GetLicense() override;
 
-        const char *GetLicense();
+        const char *GetVersion() override;
 
-        const char *GetVersion();
+        const char *GetDate() override;
 
-        const char *GetDate();
-
-        const char *GetLogTag();
+        const char *GetLogTag() override;
 
     private:
         void GameFrame(bool simulating, bool bFirstTick, bool bLastTick);

@@ -19,10 +19,10 @@ namespace acceleratorcss {
     };
 
     // Shortcuts
-#define CORE_TRACE(...)    ::acceleratorcss::Log::GetLogger()->trace(__VA_ARGS__)
-#define CORE_DEBUG(...)    ::acceleratorcss::Log::GetLogger()->debug(__VA_ARGS__)
-#define CORE_INFO(...)     ::acceleratorcss::Log::GetLogger()->info(__VA_ARGS__)
-#define CORE_WARN(...)     ::acceleratorcss::Log::GetLogger()->warn(__VA_ARGS__)
-#define CORE_ERROR(...)    ::acceleratorcss::Log::GetLogger()->error(__VA_ARGS__)
-#define CORE_CRITICAL(...) ::acceleratorcss::Log::GetLogger()->critical(__VA_ARGS__)
+#define CORE_TRACE(fmt, ...)    ::acceleratorcss::Log::GetLogger()->trace("- [ " fmt " ] -", ##__VA_ARGS__)
+#define CORE_DEBUG(fmt, ...)    ::acceleratorcss::Log::GetLogger()->debug("- [ " fmt " ] -", ##__VA_ARGS__)
+#define CORE_INFO(fmt, ...)     ::acceleratorcss::Log::GetLogger()->info("- [ " fmt " ] -", ##__VA_ARGS__)
+#define CORE_WARN(fmt, ...)     ::acceleratorcss::Log::GetLogger()->warn("- [ " fmt " ] -", ##__VA_ARGS__)
+#define CORE_ERROR(fmt, ...)    ::acceleratorcss::Log::GetLogger()->error("- [ " fmt " ] -", ##__VA_ARGS__)
+#define CORE_CRITICAL(fmt, ...) ::acceleratorcss::Log::GetLogger()->critical("- [ " fmt " ] -", ##__VA_ARGS__)
 }

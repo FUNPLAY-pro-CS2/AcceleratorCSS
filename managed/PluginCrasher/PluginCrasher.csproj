@@ -14,12 +14,4 @@
     </Reference>
   </ItemGroup>
 
-  <PropertyGroup>
-    <DefineConstants>
-      $(DefineConstants);
-      SEMVER="$(SEMVER)";
-      GITHUB_SHA="$(GITHUB_SHA_SHORT)"
-    </DefineConstants>
-  </PropertyGroup>
-
 </Project>

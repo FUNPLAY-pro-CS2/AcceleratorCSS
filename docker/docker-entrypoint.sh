@@ -21,13 +21,12 @@ cmake .. \
 
 echo "=== Building with Ninja + GCC | RelWithDebInfo | All ==="
 cmake --build . --config RelWithDebInfo -j"$(nproc)"
+cd ../
 
-mkdir -p addons/metamod
-mkdir -p addons/AcceleratorCSS/bin/linuxsteamrt64
-mkdir -p addons/counterstrikesharp/plugins
-mkdir -p addons/counterstrikesharp/shared/0Harmony
+mkdir -p build/addons/metamod
+mkdir -p build/addons/AcceleratorCSS/bin/linuxsteamrt64
+mkdir -p build/addons/counterstrikesharp/plugins
 
-cp ../managed/0Harmony.dll \
-   addons/counterstrikesharp/shared/0Harmony/0Harmony.dll
-
-dotnet publish ../managed/AcceleratorCSS_CSS/AcceleratorCSS_CSS.csproj -c Release -o addons/counterstrikesharp/plugins/AcceleratorCSS_CSS
+dotnet publish managed/AcceleratorCSS_CSS/AcceleratorCSS_CSS.csproj -c Release -o build/addons/counterstrikesharp/plugins/AcceleratorCSS_CSS \
+  -p:SEMVER="$SEMVER" \
+  -p:GITHUB_SHA_SHORT="$GITHUB_SHA_SHORT"
