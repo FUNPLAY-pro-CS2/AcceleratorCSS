@@ -1,130 +1,150 @@
 # AcceleratorCSS
 
-**Local crash handler for CounterStrikeSharp with callback trace logging.**
+**Binary crash handler and managed trace detour for CounterStrikeSharp**
 
 ---
 
 ## Overview
 
-`AcceleratorCSS` is a Metamod plugin for CS2 servers. It provides:
+`AcceleratorCSS` is a hybrid crash handling and managed tracing system for **Counter-Strike 2** servers. It consists of two tightly integrated components:
 
-* Local crash dump creation using Breakpad
-* Custom crash log file generation
-* Full callback trace logging before crash
-* Runtime hook on CounterStrikeSharp to intercept all callback calls
-* Configurable trace filters (`config.json`)
-* Auto-repair of signal handler detour (in `GameFrame()`)
-* Requires a C# plugin (`AcceleratorCSS_CSS`) to hook callback invocations
-* Currently Linux-only, but Windows support is planned
+- **`AcceleratorCSS.so`** – native Metamod module providing low-level crash interception, signal handling and Breakpad dump generation.
+- **`AcceleratorCSS_CSS.dll`** – managed C# plugin for CounterStrikeSharp that dynamically detours every plugin method and records a lightweight binary call history for crash diagnostics.
+
+No configuration, no setup – just drop in the binaries and start your server.
 
 ---
 
 ## Features
 
-* Tracing of **all** executed C# callbacks (not limited to `FunctionReference`)
-* Breakpad integration for safe `.txt` log generation
-* Thread-safe ring buffer for last 5 callback invocations
-* Hook auto-restoration of crash signal handlers
-* Support for late plugin loading
-* Config system for filtering noisy traces (`ProfileExcludeFilters`, defaultly "OnTick", "CheckTransmit", "Display" are blocked)
+- **Automatic detouring** of nearly all CounterStrikeSharp plugin methods using Harmony
+- **Managed call history tracking** across all threads
+- **Breakpad integration** for native crash dumps
+- **Readable crash log output** with newest calls on top
+- **Thread-aware grouping** and repetition aggregation (e.g. `×255`)
+- **Zero configuration** – no `config.json`, no setup files
+- **Linux only** (Windows build planned)
 
 ---
 
-## File Output
-
-Crash logs are written to:
+## Example Dump
 
 ```
-/addons/AcceleratorCSS/logs/
+============= DUMP START ==============
+---
+============= ENVIRONMENT =============
+Timestamp: 2025-10-11 13:14:53 UTC
+Process ID: 47
+Map: de_mirage
+CounterStrikeSharp Version: 1.0.340+Branch.main.Sha.4869acac41d3cd988e23a692d728d7d499c76cfd.4869aca
+AcceleratorCSS Version: Local @ Local
+CLR Version: 8.0.3
+OS: Unix 6.8.0.83
+---
+======== MANAGED CALL HISTORY ========
+[T1] (Newest → Oldest)
+  1: PluginCrasher.Prints::ServerLog
+  2: PluginCrasher.PluginCrasher::CmdCrash
+  3: AdminESP.AdminESP::ResetESPIfPlayerControlsPawn ×255
+  4: AdminESP.AdminESP::CheckTransmitListener ×255
+---
+============== DUMP END ==============
 ```
 
-Files:
-
-```
-crash_dump.dmp.txt
-```
-
-Text logs contain:
-
-* Map, game path, command line
-* Console output buffer
-* Trace of recent callbacks (name, count, stack)
-* Accurate stacktrace metadata for each C# callback
+This shows the newest managed calls at the top, grouped per thread and aggregated for readability.
 
 ---
 
-## Config (`config.json`)
+## Internal Flow
 
-Example:
-
-```json
-{
-  "LightweightMode": true,
-  "ProfileExcludeFilters": [
-    "HeartbeatListener",
-    "SomeUnimportantPluginNamespace",
-    "OnTick"
-  ]
-}
+```
+┌──────────────────────────┐
+│CounterStrikeSharp Plugins│
+│ (Admin, Fun etc.)        │
+└─────────────┬────────────┘
+              │ Harmony detours all managed calls
+              ▼
+┌──────────────────────────┐
+│ AcceleratorCSS_CSS.dll   │
+│  - Tracks method calls   │
+│  - Buffers binary data   │
+│  - Dumps on crash signal │
+└─────────────┬────────────┘
+              │ Native bridge via P/Invoke
+              ▼
+┌──────────────────────────┐
+│ AcceleratorCSS.so        │
+│  - Handles SIGSEGV etc.  │
+│  - Invokes managed dump  │
+│  - Writes Breakpad dump  │
+└──────────────────────────┘
 ```
 
-In config you can set LightweightMode, this helps reducing power usage at cost of logging only method names (eg: Namespace.Class.OnAnyCommandExecuted), also you can set filters, this helps reduce log noise by skipping specific callbacks based on profile string matches, defaultly "OnTick", "CheckTransmit", "Display" are blocked.
+Everything runs automatically on server start once both modules are loaded.
 
 ---
 
-## C# Plugin Requirement
+## Output Location
 
-Starting from `v1.0.1`, a lightweight C# plugin named `AcceleratorCSS_CSS` is required.
-
-It hooks into the internal execution layer of CounterStrikeSharp and reports callback names, method info, and stacktrace metadata to the native plugin via `RegisterCallbackTrace`.
-
-You can find the plugin in:
+All dumps are written to:
 
 ```
-/managed/AcceleratorCSS_CSS/
+addons/AcceleratorCSS/logs/
 ```
 
-It is automatically built and deployed together with the native plugin when using Docker.
+Typical files:
+
+```
+managed_trace_2025-10-11_131453.txt
+crash_dump.dmp
+```
 
 ---
 
-## Building
+## Build Instructions
 
-### Dependencies:
+### Requirements
 
-* [funchook](https://github.com/kubo/funchook)
-* [Google Breakpad](https://chromium.googlesource.com/breakpad/breakpad/)
-* [spdlog](https://github.com/gabime/spdlog)
-* HL2SDK-CS2 headers
-* Metamod:Source (CS2 version)
-* [CounterStrikeSharp v1.0.340 required](https://github.com/roflmuffin/CounterStrikeSharp)
+- HL2SDK-CS2
+- Metamod:Source (CS2)
+- funchook
+- Google Breakpad
+- spdlog
+- .NET 8 SDK
+- CounterStrikeSharp 1.0.340
 
-### Docker + XMake:
+### Build with Docker + CMake
 
 ```bash
-git clone https://github.com/SlynxCZ/AcceleratorCSS.git
+git clone https://github.com/FUNPLAY-pro-CS2/AcceleratorCSS.git
 cd AcceleratorCSS
 git submodule update --init --recursive
-docker compose up --build
+docker compose up
 ```
 
 ---
 
-## Integration with CounterStrikeSharp
+## Usage
 
-The native plugin hooks `RegisterCallbackTrace`, and the C# plugin (`AcceleratorCSS_CSS`) reports all relevant runtime callback invocations to the native layer.
+Directory structure:
 
----
+```
+addons/
+└── AcceleratorCSS/
+    ├── bin/linuxsteamrt64/AcceleratorCSS.so
+    └── logs/
+└── counterstrikesharp/
+    ├── plugins/AcceleratorCSS_CSS/
+    │           ├── AcceleratorCSS_CSS.dll
+    │           └── 0Harmony.dll
+    └── shared/0Harmony/0Harmony.dll
+```
 
-## Example Logged Trace
+Run the server — the system starts automatically.  
+Manual managed dump can be triggered with:
 
-```text
--------- CALLBACK TRACE BEGIN -> NEWEST CALLBACK IS FIRST --------
-Name: CounterStrikeSharp.API.Core.BasePlugin+<>c__DisplayClass51_0`1[[CounterStrikeSharp.API.Core.Listeners+OnTick, CounterStrikeSharp.API]]
-Profile: ScriptCallback::Execute::<RegisterListener>b__2
-CallerStack: JailBreak.JailBreak+<>c__DisplayClass114_1.<EventPlayerDeath>b__3 @ :0
-...
--------- CALLBACK TRACE END --------
+```
+dumpmanaged
 ```
 
 ---
@@ -135,5 +155,5 @@ CallerStack: JailBreak.JailBreak+<>c__DisplayClass114_1.<EventPlayerDeath>b__3 @
 
 ## Author
 
-**Slynx / [funplay.pro](https://funplay.pro/)**
- 
+**Michal "Slynx" Přikryl**  
+[slynxdev.cz](https://slynxdev.cz)

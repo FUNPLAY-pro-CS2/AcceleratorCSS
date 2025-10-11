@@ -22,6 +22,7 @@ public class AcceleratorCSS_CSS : BasePlugin
 {
     public override string ModuleName => "AcceleratorCSS_CSS";
     public override string ModuleVersion => RuntimeContext.VersionString;
+    public override string ModuleAuthor => "Slynx";
 
     public override void Load(bool hotReload)
     {
