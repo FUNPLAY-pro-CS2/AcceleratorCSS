@@ -78,10 +78,6 @@ include_directories(
     vendor/dyncall/dyncall
     vendor/spdlog/include
     vendor/funchook/include
-    vendor/KHook/include
-    vendor/KHook/include/khook
-    vendor/KHook/third_party/safetyhook/include
-    vendor/KHook/third_party/safetyhook/include/safetyhook
     vendor/tl
     vendor
 )

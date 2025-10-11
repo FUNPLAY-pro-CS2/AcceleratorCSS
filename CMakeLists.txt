@@ -14,10 +14,8 @@ set(ZYDIS_BUILD_TOOLS OFF CACHE BOOL "Disable building tools for Zydis." FORCE)
 
 add_subdirectory(vendor/spdlog)
 add_subdirectory(vendor/dyncall)
-add_subdirectory(vendor/funchook)
-add_subdirectory(vendor/KHook)
 add_subdirectory(vendor/zlib)
-
+add_subdirectory(vendor/funchook)
 set_property(TARGET funchook-static PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 include("makefiles/protobuf.cmake")
