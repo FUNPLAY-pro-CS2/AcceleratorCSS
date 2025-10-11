@@ -399,21 +399,29 @@ internal class RuntimeContext
     public static string GameDirectory { get; private set; } = "";
     public static string MapName { get; set; } = "";
     public static string CssVersion { get; private set; } = "";
-    private static string PluginVersion { get; set; } = "";
-    private static string GitHash { get; set; } = "";
     public static string VersionString { get; private set; } = "";
     public static readonly object Lock = new();
     public static Dictionary<int, string> LastStacks = new();
     public static Dictionary<int, WeakReference<Thread>> LastThreadRefs = new();
     public static Harmony? Harmony;
 
+#if SEMVER
+    private const string BuildSemver = SEMVER;
+#else
+    private const string BuildSemver = "Local";
+#endif
+
+#if GITHUB_SHA_SHORT
+    private const string BuildGitHash = GITHUB_SHA_SHORT;
+#else
+    private const string BuildGitHash = "Local";
+#endif
+
     public static void Initialize()
     {
         GameDirectory = Server.GameDirectory;
         MapName = Server.MapName;
         CssVersion = Api.GetVersionString();
-        PluginVersion = Environment.GetEnvironmentVariable("SEMVER") ?? "Local";
-        GitHash = Environment.GetEnvironmentVariable("GITHUB_SHA_SHORT") ?? "Local";
-        VersionString = $"{PluginVersion} @ {GitHash}";
+        VersionString = $"{BuildSemver} @ {BuildGitHash}";
     }
 }

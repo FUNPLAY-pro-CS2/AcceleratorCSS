@@ -4,14 +4,13 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <CopyHarmony>true</CopyHarmony>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
     <Reference Include="0Harmony">
-        <HintPath>..\0Harmony.dll</HintPath>
-      </Reference>
+      <HintPath>..\0Harmony.dll</HintPath>
+    </Reference>
     <Reference Include="CounterStrikeSharp.API">
       <HintPath>..\CounterStrikeSharp.API.dll</HintPath>
     </Reference>
@@ -25,7 +24,7 @@
     <DefineConstants>
       $(DefineConstants);
       SEMVER="$(SEMVER)";
-      GITHUB_SHA="$(GITHUB_SHA_SHORT)"
+      GITHUB_SHA_SHORT="$(GITHUB_SHA_SHORT)";
     </DefineConstants>
   </PropertyGroup>
 
