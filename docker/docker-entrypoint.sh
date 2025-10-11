@@ -25,7 +25,12 @@ cd ../
 
 mkdir -p build/addons/metamod
 mkdir -p build/addons/AcceleratorCSS/bin/linuxsteamrt64
+mkdir -p build/addons/AcceleratorCSS/logs
 mkdir -p build/addons/counterstrikesharp/plugins
+mkdir -p build/addons/counterstrikesharp/shared/0Harmony
+
+cp managed/0Harmony.dll \
+   build/addons/counterstrikesharp/shared/0Harmony/0Harmony.dll
 
 dotnet publish managed/AcceleratorCSS_CSS/AcceleratorCSS_CSS.csproj -c Release -o build/addons/counterstrikesharp/plugins/AcceleratorCSS_CSS \
   -p:SEMVER="$SEMVER" \
