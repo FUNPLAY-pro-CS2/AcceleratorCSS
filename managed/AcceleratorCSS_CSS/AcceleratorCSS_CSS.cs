@@ -319,6 +319,11 @@ public static class NativeBridge
 
     private static ManagedCrashHandler? _managedCrashHandler;
 
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate nint RequestVersionStringDelegate();
+
+    private static RequestVersionStringDelegate? _requestVersion;
+
     public static bool Initialize(string basePath)
     {
         var path = Path.Combine(basePath, "csgo", "addons", "AcceleratorCSS", "bin", "linuxsteamrt64",
@@ -334,6 +339,8 @@ public static class NativeBridge
             _libHandle = NativeLibrary.Load(path);
             _registerAssembly = GetDelegate<RegisterManagedAssemblyDelegate>("RegisterManagedAssembly");
             _registerCrashHandler = GetDelegate<RegisterManagedCrashHandlerDelegate>("RegisterManagedCrashHandler");
+            _requestVersion = GetDelegate<RequestVersionStringDelegate>("RequestVersionString");
+
             Prints.ServerLog($"[AcceleratorCSS_CSS] Loaded native lib OK ({path})", ConsoleColor.Green);
             return true;
         }
@@ -382,6 +389,11 @@ public static class NativeBridge
         var fnPtr = Marshal.GetFunctionPointerForDelegate(_managedCrashHandler);
         RegisterCrashHandler(fnPtr);
     }
+
+    public static string? RequestVersionString()
+    {
+        return Marshal.PtrToStringAnsi(_requestVersion!.Invoke());
+    }
 }
 
 public static class Prints
@@ -405,23 +417,11 @@ internal class RuntimeContext
     public static Dictionary<int, WeakReference<Thread>> LastThreadRefs = new();
     public static Harmony? Harmony;
 
-#if SEMVER
-    private const string BuildSemver = SEMVER;
-#else
-    private const string BuildSemver = "Local";
-#endif
-
-#if GITHUB_SHA_SHORT
-    private const string BuildGitHash = GITHUB_SHA_SHORT;
-#else
-    private const string BuildGitHash = "Local";
-#endif
-
     public static void Initialize()
     {
         GameDirectory = Server.GameDirectory;
         MapName = Server.MapName;
         CssVersion = Api.GetVersionString();
-        VersionString = $"{BuildSemver} @ {BuildGitHash}";
+        VersionString = NativeBridge.RequestVersionString()!;
     }
 }

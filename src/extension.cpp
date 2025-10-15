@@ -102,11 +102,7 @@ DLL_EXPORT void RegisterManagedCrashHandler(void* fnPtr)
     CORE_INFO("[AcceleratorCSS] Managed crash callback registered at {}", fmt::ptr(fnPtr));
 }
 
-DLL_EXPORT void LogManagedEvent(const char* msg)
-{
-    if (msg && *msg)
-        CORE_INFO("[AcceleratorCSS:Managed] {}", msg);
-}
+DLL_EXPORT const char* RequestVersionString() { return VERSION_STRING; }
 
 // ============================================================================
 //   Breakpad Crash Callback
