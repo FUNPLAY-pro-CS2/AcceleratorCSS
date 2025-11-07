@@ -119,7 +119,7 @@ crash_dump.dmp
 git clone https://github.com/FUNPLAY-pro-CS2/AcceleratorCSS.git
 cd AcceleratorCSS
 git submodule update --init --recursive
-docker compose up
+docker compose -f docker/docker-compose.yml up
 ```
 
 ---
