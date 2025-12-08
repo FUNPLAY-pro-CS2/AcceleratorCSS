@@ -39,20 +39,20 @@ set_property(TARGET funchook-static PROPERTY POSITION_INDEPENDENT_CODE ON)
 include("makefiles/protobuf.cmake")
 
 set(SOURCE_FILES
-    vendor/hl2sdk-cs2/public/tier0/memoverride.cpp
     src/extension.cpp
     src/extension.h
-    vendor/hl2sdk-cs2/tier1/convar.cpp
-    vendor/hl2sdk-cs2/tier1/generichash.cpp
-    vendor/hl2sdk-cs2/tier1/keyvalues3.cpp
-    vendor/hl2sdk-cs2/entity2/entityidentity.cpp
-    vendor/hl2sdk-cs2/entity2/entitysystem.cpp
-    vendor/hl2sdk-cs2/entity2/entitykeyvalues.cpp
-    vendor/metamod-source/core/sourcehook/sourcehook.cpp
-    vendor/metamod-source/core/sourcehook/sourcehook_impl_chookidman.cpp
-    vendor/metamod-source/core/sourcehook/sourcehook_impl_chookmaninfo.cpp
-    vendor/metamod-source/core/sourcehook/sourcehook_impl_cvfnptr.cpp
-    vendor/metamod-source/core/sourcehook/sourcehook_impl_cproto.cpp
+    ${SOURCESDK_DIR}/public/tier0/memoverride.cpp
+    ${SOURCESDK_DIR}/tier1/generichash.cpp
+    ${SOURCESDK_DIR}/tier1/keyvalues3.cpp
+    ${SOURCESDK_DIR}/tier1/convar.cpp
+    ${SOURCESDK_DIR}/entity2/entityidentity.cpp
+    ${SOURCESDK_DIR}/entity2/entitysystem.cpp
+    ${SOURCESDK_DIR}/entity2/entitykeyvalues.cpp
+    ${METAMOD_DIR}/core/sourcehook/sourcehook.cpp
+    ${METAMOD_DIR}/core/sourcehook/sourcehook_impl_chookidman.cpp
+    ${METAMOD_DIR}/core/sourcehook/sourcehook_impl_chookmaninfo.cpp
+    ${METAMOD_DIR}/core/sourcehook/sourcehook_impl_cvfnptr.cpp
+    ${METAMOD_DIR}/core/sourcehook/sourcehook_impl_cproto.cpp
     src/log.cpp
     src/log.h
     src/paths.h
