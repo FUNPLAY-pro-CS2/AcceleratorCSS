@@ -3,6 +3,24 @@ cmake_minimum_required(VERSION 3.18)
 # You must set ASM, otherwise CMAKE_ASM_COMPILE_OBJECT will not work on MSVC
 project(AcceleratorCSS C CXX ASM)
 
+if(DEFINED ENV{HL2SDKCS2})
+    set(SOURCESDK_DIR $ENV{HL2SDKCS2})
+else()
+    message(FATAL_ERROR "Environment variable HL2SDKCS2 is not set!")
+endif()
+
+if(DEFINED ENV{MMSOURCE_DEV})
+    set(METAMOD_DIR $ENV{MMSOURCE_DEV})
+else()
+    message(FATAL_ERROR "Environment variable MMSOURCE_DEV is not set!")
+endif()
+
+if(DEFINED ENV{CSGO_PROTO})
+    set(CSGO_PROTO_DIR $ENV{CSGO_PROTO})
+else()
+    message(FATAL_ERROR "Environment variable CSGO_PROTO is not set!")
+endif()
+
 include("makefiles/shared.cmake")
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
