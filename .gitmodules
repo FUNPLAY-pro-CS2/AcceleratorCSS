@@ -1,10 +1,3 @@
-[submodule "vendor/hl2sdk-cs2"]
-	path = vendor/hl2sdk-cs2
-	url = https://github.com/alliedmodders/hl2sdk
-	branch = cs2
-[submodule "vendor/metamod-source"]
-	path = vendor/metamod-source
-	url = https://github.com/alliedmodders/metamod-source
 [submodule "vendor/breakpad"]
 	path = vendor/breakpad
 	url = https://github.com/SlynxCZ/breakpad.git
@@ -20,9 +13,6 @@
 [submodule "vendor/asmjit"]
 	path = vendor/asmjit
 	url = https://github.com/asmjit/asmjit
-[submodule "vendor/Protobufs"]
-	path = vendor/Protobufs
-	url = https://github.com/SteamDatabase/Protobufs
 [submodule "vendor/zlib"]
 	path = vendor/zlib
 	url = https://github.com/madler/zlib.git
