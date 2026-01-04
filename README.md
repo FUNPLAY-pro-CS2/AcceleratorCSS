@@ -111,7 +111,7 @@ crash_dump.dmp
 - Google Breakpad
 - spdlog
 - .NET 8 SDK
-- CounterStrikeSharp 1.0.340
+- Latest CounterStrikeSharp
 
 ### Build with Docker + CMake
 
