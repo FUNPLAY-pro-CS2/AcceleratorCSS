@@ -11,12 +11,10 @@
     <Reference Include="0Harmony">
       <HintPath>..\0Harmony.dll</HintPath>
     </Reference>
-    <Reference Include="CounterStrikeSharp.API">
-      <HintPath>..\CounterStrikeSharp.API.dll</HintPath>
-    </Reference>
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="CounterStrikeSharp.API" Version="*" />
     <PackageReference Include="Lib.Harmony" Version="2.3.6" />
   </ItemGroup>
 
