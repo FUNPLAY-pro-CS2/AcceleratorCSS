@@ -6,24 +6,76 @@
 
 ## Overview
 
-`AcceleratorCSS` is a hybrid crash handling and managed tracing system for **Counter-Strike 2** servers. It consists of two tightly integrated components:
+`AcceleratorCSS` is a hybrid crash handling and managed tracing system for **Counter-Strike 2** servers.  
+It consists of two tightly integrated components:
 
-- **`AcceleratorCSS.so`** – native Metamod module providing low-level crash interception, signal handling and Breakpad dump generation.
-- **`AcceleratorCSS_CSS.dll`** – managed C# plugin for CounterStrikeSharp that dynamically detours every plugin method and records a lightweight binary call history for crash diagnostics.
+- **`AcceleratorCSS.so`** – native Metamod module providing low-level crash interception, signal handling and Breakpad dump generation.  
+- **`AcceleratorCSS_CSS.dll`** – managed C# plugin for CounterStrikeSharp that dynamically detours plugin methods and records a lightweight binary call history for crash diagnostics.
 
-No configuration, no setup – just drop in the binaries and start your server.
+Just drop in the binaries and start your server.
 
 ---
 
 ## Features
 
-- **Automatic detouring** of nearly all CounterStrikeSharp plugin methods using Harmony
-- **Managed call history tracking** across all threads
-- **Breakpad integration** for native crash dumps
-- **Readable crash log output** with newest calls on top
-- **Thread-aware grouping** and repetition aggregation (e.g. `×255`)
-- **Zero configuration** – no `config.json`, no setup files
-- **Linux only** (Windows build planned)
+- Automatic detouring of nearly all CounterStrikeSharp plugin methods using Harmony  
+- Managed call history tracking across all threads  
+- Breakpad integration for native crash dumps  
+- Readable crash log output with newest calls on top  
+- Thread-aware grouping and repetition aggregation (e.g. `×255`)  
+- Optional hook filtering via config.json  
+- Linux only (Windows build planned)  
+
+---
+
+## Configuration (Optional)
+
+By default, AcceleratorCSS detours **all plugin methods**.
+
+You can exclude specific methods from detouring using:
+
+```
+addons/AcceleratorCSS/config.json
+```
+
+### Example
+
+```json
+{
+  "disabled_hooks": [
+    "PluginCrasher.PluginCrasher::CmdCrash"
+  ]
+}
+```
+
+### Format
+
+```
+Namespace.Class::Method
+```
+
+### Wildcards
+
+You can use `*`:
+
+```json
+{
+  "disabled_hooks": [
+    "KvLib::*::*",
+    "SkyboxChanger.Plugin::*"
+  ]
+}
+```
+
+### Behavior
+
+- Disabled methods:
+  - are **not detoured**
+  - run completely untouched
+- Other methods:
+  - remain fully traced
+- Native crash handler:
+  - always active (cannot be disabled)
 
 ---
 
@@ -36,7 +88,7 @@ No configuration, no setup – just drop in the binaries and start your server.
 Timestamp: 2025-10-11 13:14:53 UTC
 Process ID: 47
 Map: de_mirage
-CounterStrikeSharp Version: 1.0.340+Branch.main.Sha.4869acac41d3cd988e23a692d728d7d499c76cfd.4869aca
+CounterStrikeSharp Version: 1.0.340+Branch.main
 AcceleratorCSS Version: Local @ Local
 CLR Version: 8.0.3
 OS: Unix 6.8.0.83
@@ -51,8 +103,6 @@ OS: Unix 6.8.0.83
 ============== DUMP END ==============
 ```
 
-This shows the newest managed calls at the top, grouped per thread and aggregated for readability.
-
 ---
 
 ## Internal Flow
@@ -62,7 +112,7 @@ This shows the newest managed calls at the top, grouped per thread and aggregate
 │CounterStrikeSharp Plugins│
 │ (Admin, Fun etc.)        │
 └─────────────┬────────────┘
-              │ Harmony detours all managed calls
+              │ Harmony detours
               ▼
 ┌──────────────────────────┐
 │ AcceleratorCSS_CSS.dll   │
@@ -70,7 +120,7 @@ This shows the newest managed calls at the top, grouped per thread and aggregate
 │  - Buffers binary data   │
 │  - Dumps on crash signal │
 └─────────────┬────────────┘
-              │ Native bridge via P/Invoke
+              │ Native bridge (P/Invoke)
               ▼
 ┌──────────────────────────┐
 │ AcceleratorCSS.so        │
@@ -79,8 +129,6 @@ This shows the newest managed calls at the top, grouped per thread and aggregate
 │  - Writes Breakpad dump  │
 └──────────────────────────┘
 ```
-
-Everything runs automatically on server start once both modules are loaded.
 
 ---
 
@@ -105,13 +153,13 @@ crash_dump.dmp
 
 ### Requirements
 
-- HL2SDK-CS2
-- Metamod:Source (CS2)
-- funchook
-- Google Breakpad
-- spdlog
-- .NET 8 SDK
-- Latest CounterStrikeSharp
+- HL2SDK-CS2  
+- Metamod:Source (CS2)  
+- funchook  
+- Google Breakpad  
+- spdlog  
+- .NET 8 SDK  
+- Latest CounterStrikeSharp  
 
 ### Build with Docker + CMake
 
@@ -132,7 +180,8 @@ Directory structure:
 addons/
 └── AcceleratorCSS/
     ├── bin/linuxsteamrt64/AcceleratorCSS.so
-    └── logs/
+    ├── logs/
+    └── config.json (optional)
 └── counterstrikesharp/
     ├── plugins/AcceleratorCSS_CSS/
     │           ├── AcceleratorCSS_CSS.dll
@@ -140,8 +189,9 @@ addons/
     └── shared/0Harmony/0Harmony.dll
 ```
 
-Run the server — the system starts automatically.  
-Manual managed dump can be triggered with:
+Start the server – everything initializes automatically.
+
+Manual managed dump:
 
 ```
 dumpmanaged
@@ -151,9 +201,12 @@ dumpmanaged
 
 ## License
 
-[GPLv3](https://www.gnu.org/licenses/gpl-3.0.en.html)
+GPLv3  
+https://www.gnu.org/licenses/gpl-3.0.en.html
+
+---
 
 ## Author
 
 **Michal "Slynx" Přikryl**  
-[slynxdev.cz](https://slynxdev.cz)
+https://slynxdev.cz
