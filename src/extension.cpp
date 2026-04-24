@@ -231,7 +231,7 @@ namespace acceleratorcss
             std::snprintf(crashMap, sizeof(crashMap), "%s", pszMapName);
     }
 
-    const char* AcceleratorCSS_MM::GetAuthor() { return "Slynx"; }
+    const char* AcceleratorCSS_MM::GetAuthor() { return "Slynx (˙·٠● S l y n x ●٠·˙)"; }
     const char* AcceleratorCSS_MM::GetName() { return "AcceleratorCSS"; }
     const char* AcceleratorCSS_MM::GetDescription() { return "Crash handler bridge for CounterStrikeSharp"; }
     const char* AcceleratorCSS_MM::GetURL() { return "https://slynxdev.cz/"; }
