@@ -8,6 +8,8 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes.Registration;
@@ -50,10 +52,9 @@ public class AcceleratorCSS_CSS : BasePlugin
             return;
         }
 
-        AssemblyRegistry.Initialize();
         RuntimeContext.Initialize();
         NativeBridge.RegisterCrashCallback();
-
+        ManagedCrashDumper.LoadConfig();
         RuntimeContext.Harmony = new Harmony("AcceleratorCSS_CSS");
         ManagedCrashDumper.ApplyHarmonyPatches();
 
@@ -68,31 +69,6 @@ public class AcceleratorCSS_CSS : BasePlugin
     }
 }
 
-internal static class AssemblyRegistry
-{
-    public static void Initialize()
-    {
-        foreach (var alc in AssemblyLoadContext.All)
-        {
-            foreach (var asm in alc.Assemblies)
-            {
-                if (IsSystemAssembly(asm))
-                    continue;
-
-                var name = asm.GetName();
-                NativeBridge.RegisterAssembly(name.Name ?? "<unknown>", name.Version?.ToString() ?? "unknown");
-            }
-        }
-    }
-
-    private static bool IsSystemAssembly(Assembly asm)
-    {
-        var n = asm.FullName ?? "";
-        return n.StartsWith("System") || n.StartsWith("Microsoft") || n.StartsWith("mscorlib") ||
-               n.StartsWith("netstandard");
-    }
-}
-
 internal static class ManagedCrashDumper
 {
     private const int MaxHistory = 512;
@@ -100,10 +76,70 @@ internal static class ManagedCrashDumper
     private static readonly Queue<byte[]> _entries = new();
     private static readonly List<string> _stringPool = new();
     private static readonly Dictionary<string, ushort> _stringIndex = new();
+    private static List<string> _disabledRules = new();
 
-    // =====================================================================
-    // Harmony patching
-    // =====================================================================
+    public static void LoadConfig()
+    {
+        try
+        {
+            var path = Path.Combine(RuntimeContext.GameDirectory, "csgo", "addons", "AcceleratorCSS", "config.json");
+
+            if (!File.Exists(path))
+            {
+                Prints.ServerLog("[AcceleratorCSS_CSS] Config not found, skipping.",
+                    ConsoleColor.DarkGray);
+                return;
+            }
+
+            var json = File.ReadAllText(path);
+            var doc = JsonDocument.Parse(json);
+
+            if (doc.RootElement.TryGetProperty("disabled_hooks", out var arr))
+            {
+                _disabledRules = arr.EnumerateArray()
+                                    .Select(e => e.GetString()!)
+                                    .ToList();
+            }
+
+            Prints.ServerLog(
+                $"[AcceleratorCSS_CSS] Loaded {_disabledRules.Count} hook rules",
+                ConsoleColor.Cyan);
+        }
+        catch (Exception e)
+        {
+            Prints.ServerLog(
+                $"[AcceleratorCSS_CSS] Config load failed: {e}",
+                ConsoleColor.Red);
+        }
+    }
+
+    private static bool IsExcluded(MethodInfo m)
+    {
+        if (_disabledRules.Count == 0)
+            return false;
+
+        string sig =
+            $"{m.DeclaringType?.FullName}::{m.Name}";
+
+        foreach (var r in _disabledRules)
+        {
+            if (WildcardMatch(sig, r))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool WildcardMatch(string input, string rule)
+    {
+        var regex = "^" +
+            Regex.Escape(rule)
+                .Replace("\\*", ".*") +
+            "$";
+
+        return Regex.IsMatch(input, regex);
+    }
+
     public static void ApplyHarmonyPatches()
     {
         int patched = 0, skipped = 0;
@@ -131,6 +167,12 @@ internal static class ManagedCrashDumper
                                                       BindingFlags.DeclaredOnly))
                     {
                         if (!IsValidMethod(m))
+                        {
+                            skipped++;
+                            continue;
+                        }
+
+                        if (IsExcluded(m))
                         {
                             skipped++;
                             continue;
@@ -192,9 +234,6 @@ internal static class ManagedCrashDumper
         }
     }
 
-    // =====================================================================
-    // Call logging
-    // =====================================================================
     public static void OnEnter(MethodBase __originalMethod)
     {
         int tid = Thread.CurrentThread.ManagedThreadId;
@@ -224,9 +263,6 @@ internal static class ManagedCrashDumper
         }
     }
 
-    // =====================================================================
-    // Dump writer
-    // =====================================================================
     public static void Dump()
     {
         try
@@ -306,10 +342,6 @@ public static class NativeBridge
 {
     private static nint _libHandle;
 
-    private delegate void RegisterManagedAssemblyDelegate(string name, string version);
-
-    private static RegisterManagedAssemblyDelegate? _registerAssembly;
-
     private delegate void RegisterManagedCrashHandlerDelegate(nint fnPtr);
 
     private static RegisterManagedCrashHandlerDelegate? _registerCrashHandler;
@@ -337,7 +369,6 @@ public static class NativeBridge
         try
         {
             _libHandle = NativeLibrary.Load(path);
-            _registerAssembly = GetDelegate<RegisterManagedAssemblyDelegate>("RegisterManagedAssembly");
             _registerCrashHandler = GetDelegate<RegisterManagedCrashHandlerDelegate>("RegisterManagedCrashHandler");
             _requestVersion = GetDelegate<RequestVersionStringDelegate>("RequestVersionString");
 
@@ -364,9 +395,6 @@ public static class NativeBridge
             return null;
         }
     }
-
-    public static void RegisterAssembly(string name, string version)
-        => _registerAssembly?.Invoke(name, version);
 
     private static void RegisterCrashHandler(nint fnPtr)
         => _registerCrashHandler?.Invoke(fnPtr);

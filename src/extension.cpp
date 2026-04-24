@@ -61,34 +61,8 @@ char crashGamePath[512];
 char crashCommandLine[1024];
 char dumpStoragePath[512];
 
-struct ManagedAssemblyInfo
-{
-    std::string name;
-    std::string version;
-    std::chrono::system_clock::time_point registeredAt;
-};
-
-std::vector<ManagedAssemblyInfo> g_ManagedAssemblies;
-std::mutex g_ManagedAssembliesMutex;
-
 typedef void (*ManagedCrashCallback_t)();
 ManagedCrashCallback_t g_ManagedCrashCallback = nullptr;
-
-// ============================================================================
-//   Managed Bridge Functions
-// ============================================================================
-
-DLL_EXPORT void RegisterManagedAssembly(const char* name, const char* version)
-{
-    if (!name || !version)
-        return;
-
-    std::lock_guard<std::mutex> lock(g_ManagedAssembliesMutex);
-    ManagedAssemblyInfo info{name, version, std::chrono::system_clock::now()};
-    g_ManagedAssemblies.push_back(std::move(info));
-
-    CORE_INFO("[AcceleratorCSS] Registered managed assembly: {} v{}", name, version);
-}
 
 DLL_EXPORT void RegisterManagedCrashHandler(void* fnPtr)
 {
@@ -104,15 +78,8 @@ DLL_EXPORT void RegisterManagedCrashHandler(void* fnPtr)
 
 DLL_EXPORT const char* RequestVersionString() { return VERSION_STRING; }
 
-// ============================================================================
-//   Breakpad Crash Callback
-// ============================================================================
-
 static bool dumpCallback(const google_breakpad::MinidumpDescriptor& descriptor, void*, bool succeeded) { return true; }
 
-// ============================================================================
-//   Signal Hooking
-// ============================================================================
 void* ManagedCrashInvoker(void*)
 {
     if (g_ManagedCrashCallback)
@@ -146,10 +113,6 @@ void SignalHandler_Extended(int sig, siginfo_t* info, void* ucontext)
     if (SignalHandler)
         SignalHandler(sig, info, ucontext);
 }
-
-// ============================================================================
-//   Metamod Plugin
-// ============================================================================
 
 PLUGIN_EXPOSE(AcceleratorCSS_MM, acceleratorcss::g_iPlugin);
 
