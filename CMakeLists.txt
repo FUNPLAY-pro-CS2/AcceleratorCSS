@@ -42,7 +42,6 @@ set(SOURCE_FILES
     src/extension.cpp
     src/extension.h
     ${SOURCESDK_DIR}/public/tier0/memoverride.cpp
-    ${SOURCESDK_DIR}/tier1/generichash.cpp
     ${SOURCESDK_DIR}/tier1/keyvalues3.cpp
     ${SOURCESDK_DIR}/tier1/convar.cpp
     ${SOURCESDK_DIR}/entity2/entityidentity.cpp
