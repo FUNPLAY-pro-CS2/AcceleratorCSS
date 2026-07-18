@@ -16,7 +16,7 @@ RUN apt update && apt install -y \
     pkg-config \
     libcurl4-openssl-dev \
     libmaxminddb-dev \
-    curl \
+    curl
 
 RUN git config --system --add safe.directory '*'
 
